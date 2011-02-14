@@ -4,9 +4,29 @@ use Modern::Perl;
 use MooseX::Declare;
 use IO::Socket;
 
-#package Irc;
+use Plugin;
+
+package Irc;
 
 my $sock;
+my %plugins;
+
+sub load_plugin
+{
+    my ($name, $plugin) = @_;
+
+    $plugin->load();
+    $plugins{$name} = $plugin;
+}
+
+sub unload_plugins
+{
+    for my $plugin (values %plugins)
+    {
+        $plugin->unload();
+    }
+    %plugins = ();
+}
 
 sub send_msg
 {
@@ -15,15 +35,102 @@ sub send_msg
     say "> $msg";
 }
 
+sub send_privmsg
+{
+    my ($target, $msg) = @_;
+
+    send_msg ("PRIVMSG $target :$msg");
+}
+
 sub recieve_msg
 {
     my ($msg) = @_;
     say "< $msg";
 }
 
-sub quit_irc
+sub quit
 {
-    send_msg("QUIT :$Config::quit_msg");
+    send_msg ("QUIT :$Config::quit_msg");
+}
+
+sub parse_msg
+{
+    my ($msg) = @_;
+
+    for my $plugin (values %plugins)
+    {
+        $plugin->process_bare_msg ($msg);
+    }
+
+    if( $msg =~ /
+            ^
+            (?:
+               :(\S+) # (1) prefix
+               \s
+            )?        # prefix isn't mandatory
+            (\S+)     # (2) cmd
+            \s
+            (.+)      # (3) parameters
+            $
+        /x )
+    {
+        my $prefix;
+        if (!defined ($1)) {
+            $prefix = "";
+        }
+        else {
+            $prefix = "$1";
+        }
+        my $cmd = $2;
+        my $param = $3;
+
+        process_msg($prefix, $cmd, $param);
+    }
+    else {
+        say "! peculiar, we couldn't capture the message";
+        say $msg;
+    }
+}
+
+sub process_msg
+{
+    my ($prefix, $irc_cmd, $param) = @_;
+
+    for my $plugin (values %plugins)
+    {
+        $plugin->process_irc_msg ($prefix, $irc_cmd, $param);
+    }
+
+    if( $irc_cmd =~ /PRIVMSG/ ) {
+        if( $param =~ /^(\S+)\s:(.*)$/ ) {
+            my $target = $1;
+            my $msg = $2;
+
+            $prefix =~ /^(.+?)!~/;
+            my $sender = $1;
+
+            # if we're the target swap target/sender so we don't message ourselves
+            if ($target =~ /$Config::nick/) {
+                $target = $sender;
+            }
+
+            if( $msg =~ /^$Config::cmd_prefix(\S*)\s?(.*)$/ ) {
+                my $cmd = $1;
+                my $args = $2;
+
+                for my $plugin (values %plugins)
+                {
+                    $plugin->process_cmd ($sender, $target, $cmd, $args);
+                }
+            }
+            else {
+                for my $plugin (values %plugins)
+                {
+                    $plugin->process_privmsg ($sender, $target, $msg);
+                }
+            }
+        }
+    }
 }
 
 sub start
