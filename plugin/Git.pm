@@ -8,6 +8,10 @@ use Plugin;
 
 class Git extends DefaultPlugin
 {
+    override load
+    {
+        $self->git_commit = `git rev-parse HEAD`;
+    }
     override module_cmds
     {
         return qw(git);
@@ -21,6 +25,8 @@ class Git extends DefaultPlugin
             Irc::send_privmsg ($target, "Latest commit: $head");
         }
     }
+
+    has 'git_commit', is => 'rw';
 }
 
 1;
