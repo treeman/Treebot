@@ -21,6 +21,10 @@ class Stuff extends DefaultPlugin
         elsif ($cmd =~ /botsnack/) {
             Irc::send_privmsg ($target, ":)");
         }
+        elsif ($cmd =~ /status/) {
+            # http status of the bot
+            Irc::send_privmsg ($target, "Status: 418 I'm a teapot");
+        }
     }
 
     override process_privmsg ($sender, $target, $msg)

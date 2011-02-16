@@ -9,9 +9,8 @@ push( @INC, '.' );
 require "Config.pl";
 require "Irc.pl";
 
+# try to load all files in the plugins folder
 my $dirname = "plugin";
-
-my %plugins;
 
 opendir(DIR, $dirname) or die "can't open dir $dirname: $!";
 while (defined (my $file = readdir(DIR))) {
@@ -26,6 +25,7 @@ while (defined (my $file = readdir(DIR))) {
 }
 closedir(DIR);
 
+# register SIGINT failure for cleanup
 $SIG{INT} = \&quit;
 
 sub quit

@@ -109,7 +109,8 @@ sub process_msg
             $prefix =~ /^(.+?)!~/;
             my $sender = $1;
 
-            # if we're the target swap target/sender so we don't message ourselves
+            # if we're the target change target so we don't message ourselves
+            # this looks pretty bad really, change?
             if ($target =~ /$Config::nick/) {
                 $target = $sender;
             }
