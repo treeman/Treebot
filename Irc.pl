@@ -5,6 +5,7 @@ use MooseX::Declare;
 use IO::Socket;
 
 use Plugin;
+use Log;
 
 package Irc;
 
@@ -51,10 +52,10 @@ sub send_msg
 
     if (length($msg) > 0 ) {
         print $sock "$msg\r\n";
-        say "> $msg";
+        Log::sent($msg);
     }
     else {
-        say "! trying to send an empty message.";
+        Log::error("! trying to send an empty message.");
     }
 }
 
@@ -68,7 +69,7 @@ sub send_privmsg
 sub recieve_msg
 {
     my ($msg) = @_;
-    say "< $msg";
+    Log::recieved($msg);
 }
 
 sub quit
@@ -110,8 +111,7 @@ sub parse_msg
         process_msg($prefix, $cmd, $param);
     }
     else {
-        say "! peculiar, we couldn't capture the message";
-        say $msg;
+        Log::error("! peculiar, we couldn't capture the message: ", $msg);
     }
 }
 
@@ -138,9 +138,12 @@ sub process_msg
                 $target = $sender;
             }
 
-            if( $msg =~ /^\Q$Config::cmd_prefix\E(\S*)\s?(.*)$/ ) {
+            if( $msg =~ /^\Q$Config::cmd_prefix\E(\S*)\s*(\w*)/ ) {
                 my $cmd = $1;
                 my $args = $2;
+                chomp $args;
+
+                say "msg = $cmd $args";
 
                 if ($cmd eq "help") {
                     if ($args =~ /^\s*$/) {

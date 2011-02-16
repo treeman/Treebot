@@ -4,6 +4,10 @@ use Modern::Perl;
 use MooseX::Declare;
 use Test::More;
 
+use Log;
+
+Log::error "meep = ", "oopsie";
+
 push( @INC, '.' );
 
 require "Config.pl";
@@ -23,7 +27,7 @@ while (defined (my $file = readdir(DIR))) {
             Irc::register_plugin($name, $plugin);
         }
         else {
-            say "$file in $dirname doesn't do the Plugin role!";
+            Log::error("$file in $dirname doesn't do the Plugin role!");
         }
     }
 }
