@@ -10,7 +10,7 @@ class Git extends DefaultPlugin
 {
     override load
     {
-        $self->git_commit = `git rev-parse HEAD`;
+        $self->head(`git rev-parse HEAD`);
     }
     override module_cmds
     {
@@ -20,13 +20,12 @@ class Git extends DefaultPlugin
     override process_cmd ($sender, $target, $cmd, $arg)
     {
         if ($cmd =~ /git/ && $arg =~ /status/) {
-            my $head = `git rev-parse HEAD`;
-            chomp $head;
+            my $head = $self->head();
             Irc::send_privmsg ($target, "Latest commit: $head");
         }
     }
 
-    has 'git_commit', is => 'rw';
+    has 'head', is => 'rw';
 }
 
 1;

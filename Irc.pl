@@ -191,7 +191,11 @@ sub start
             last;
         }
         elsif ($input =~ /433/) {
-            die "Nickname is already in use.";
+            #die "Nickname is already in use.";
+
+            # Instead of death try to force use of some random nickname
+            my $rand_int = int(rand(100));
+            send_msg "NICK $Config::nick$rand_int";
         }
     }
 
