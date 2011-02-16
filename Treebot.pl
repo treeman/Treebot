@@ -6,8 +6,6 @@ use Test::More;
 
 use Log;
 
-Log::error "meep = ", "oopsie";
-
 push( @INC, '.' );
 
 require "Config.pl";

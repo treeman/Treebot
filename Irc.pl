@@ -80,6 +80,8 @@ sub quit
 sub parse_msg
 {
     my ($msg) = @_;
+    # IRC standard says that every message will be followed by \r\n.
+    chomp($msg);
 
     for my $plugin (values %plugins)
     {
@@ -107,6 +109,8 @@ sub parse_msg
         }
         my $cmd = $2;
         my $param = $3;
+
+        #say $prefix, " ", $cmd, " ", $param;
 
         process_msg($prefix, $cmd, $param);
     }
@@ -138,12 +142,15 @@ sub process_msg
                 $target = $sender;
             }
 
-            if( $msg =~ /^\Q$Config::cmd_prefix\E(\S*)\s*(\w*)/ ) {
+            if ($msg =~ /
+                      ^\Q$Config::cmd_prefix\E  # cmd prefix
+                      (\S*)                     # (1) cmd
+                      \s*
+                      (.*)                      # (2) args
+                    /x) {
                 my $cmd = $1;
                 my $args = $2;
                 chomp $args;
-
-                say "msg = $cmd $args";
 
                 if ($cmd eq "help") {
                     if ($args =~ /^\s*$/) {
@@ -200,14 +207,17 @@ sub start
             last;
         }
         elsif ($input =~ /433/) {
-            # Instead of death try to force use of some random nickname
+            # Instead of death try to force use of some random nickname.
             my $rand_int = int(rand(100));
             send_msg "NICK $Config::nick$rand_int";
         }
     }
 
-    # Join the channel.
-    send_msg "JOIN $Config::channel";
+    # Join our channels.
+    for my $channel (@Config::channels)
+    {
+        send_msg "JOIN $channel";
+    }
 
     # Actually load all plugins.
     load_plugins();

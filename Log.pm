@@ -14,30 +14,40 @@ sub log_file_name
     $year += 1900;
 
     my $log_dir = $Config::log_dir;
-    return "log_$log_dir$year-$month-$day.log";
+    return "${log_dir}$year-$month-$day.log";
+}
+
+sub get_log_file
+{
+    my $log_file = log_file_name();
+    open my $fh, '>>', $log_file
+        or die "Couldn't open log file: '$log_file'\n$!\n";
+    return $fh;
 }
 
 sub error
 {
-    #local $, = "";
-    #say "! ", @_;
     my $msg = "! " . join("", @_);
     say $msg;
 
-    #say "!!! ", log_file_name();
-    open my $f, '>>', log_file_name();
-    #open my $f, '>>', "logs/log";
-    say $f $msg;
+    my $fh = get_log_file();
+    say $fh $msg;
 }
 sub recieved
 {
-    local $, = "";
-    say "< ", @_;
+    my $msg = "< " . join("", @_);
+    say $msg;
+
+    my $fh = get_log_file();
+    say $fh $msg;
 }
 sub sent
 {
-    local $, = "";
-    say "> ", @_;
+    my $msg = "> " . join("", @_);
+    say $msg;
+
+    my $fh = get_log_file();
+    say $fh $msg;
 }
 
 1;
