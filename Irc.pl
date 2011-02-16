@@ -80,8 +80,6 @@ sub quit
 sub parse_msg
 {
     my ($msg) = @_;
-    # IRC standard says that every message will be followed by \r\n.
-    chomp($msg);
 
     for my $plugin (values %plugins)
     {
@@ -97,6 +95,7 @@ sub parse_msg
             (\S+)     # (2) cmd
             \s
             (.+)      # (3) parameters
+            \r        # irc standard includes carriage return :<
             $
         /x )
     {
@@ -109,8 +108,6 @@ sub parse_msg
         }
         my $cmd = $2;
         my $param = $3;
-
-        #say $prefix, " ", $cmd, " ", $param;
 
         process_msg($prefix, $cmd, $param);
     }
@@ -150,7 +147,6 @@ sub process_msg
                     /x) {
                 my $cmd = $1;
                 my $args = $2;
-                chomp $args;
 
                 if ($cmd eq "help") {
                     if ($args =~ /^\s*$/) {

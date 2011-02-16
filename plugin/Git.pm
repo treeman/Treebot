@@ -20,7 +20,7 @@ class Git extends DefaultPlugin
     override process_cmd ($sender, $target, $cmd, $arg)
     {
         if ($cmd eq "git") {
-            if ($arg eq "commit") {
+            if ($arg =~ /^commit$/) {
                 my $head = $self->head();
                 chomp $head;
                 Irc::send_privmsg ($target, "Latest commit: $head");
