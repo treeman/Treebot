@@ -48,8 +48,14 @@ sub unload_plugins
 sub send_msg
 {
     my ($msg) = @_;
-    print $sock "$msg\r\n";
-    say "> $msg";
+
+    if (length($msg) > 0 ) {
+        print $sock "$msg\r\n";
+        say "> $msg";
+    }
+    else {
+        say "! trying to send an empty message.";
+    }
 }
 
 sub send_privmsg

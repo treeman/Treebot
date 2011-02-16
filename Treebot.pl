@@ -19,8 +19,12 @@ while (defined (my $file = readdir(DIR))) {
 
         my $name = $1;
         my $plugin = $name->new();
-
-        Irc::register_plugin($name, $plugin);
+        if ($plugin->DOES('Plugin')) {
+            Irc::register_plugin($name, $plugin);
+        }
+        else {
+            say "$file in $dirname doesn't do the Plugin role!";
+        }
     }
 }
 closedir(DIR);

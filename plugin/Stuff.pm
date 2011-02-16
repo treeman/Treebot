@@ -26,17 +26,17 @@ class Stuff extends DefaultPlugin
 
     override process_cmd ($sender, $target, $cmd, $arg)
     {
-        if ($cmd =~ /id/) {
+        if ($cmd eq "id" && length($arg) < 80) {
             Irc::send_privmsg ($target, $arg);
         }
-        elsif ($cmd =~ /botsnack/) {
+        elsif ($cmd eq "botsnack") {
             Irc::send_privmsg ($target, ":)");
         }
-        elsif ($cmd =~ /status/) {
+        elsif ($cmd eq "status") {
             # http status of the bot
             Irc::send_privmsg ($target, "Status: 418 I'm a teapot");
         }
-        elsif ($cmd =~ /uptime/) {
+        elsif ($cmd eq "uptime") {
             my $curr = time;
             my $passed = $curr - $self->started();
 
