@@ -20,7 +20,7 @@ while (defined (my $file = readdir(DIR))) {
         my $name = $1;
         my $plugin = $name->new();
 
-        Irc::load_plugin($name, $plugin);
+        Irc::register_plugin($name, $plugin);
     }
 }
 closedir(DIR);

@@ -19,6 +19,9 @@ role Plugin
 
 class DefaultPlugin with Plugin
 {
+    method load { }
+    method unload { }
+
     # return list of commands the plugin listens to
     method module_cmds { return (); }
 
@@ -37,9 +40,6 @@ class DefaultPlugin with Plugin
 
     # should return a help message for every command the module defines
     method cmd_help { }
-
-    method load { }
-    method unload { }
 }
 
 1;

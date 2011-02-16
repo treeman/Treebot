@@ -10,13 +10,30 @@ package Irc;
 
 my $sock;
 my %plugins;
+my @cmd_list;
 
-sub load_plugin
+sub register_plugin
 {
     my ($name, $plugin) = @_;
 
-    $plugin->load();
     $plugins{$name} = $plugin;
+}
+
+sub load_plugins
+{
+    for my $plugin (values %plugins)
+    {
+        $plugin->load();
+        my @cmds = $plugin->module_cmds();
+        for my $cmd (@cmds) {
+            if ($cmd) {
+                push(@cmd_list, $cmd);
+            }
+        }
+    }
+
+    push(@cmd_list, "cmds");
+    push(@cmd_list, "help");
 }
 
 sub unload_plugins
@@ -115,13 +132,24 @@ sub process_msg
                 $target = $sender;
             }
 
-            if( $msg =~ /^$Config::cmd_prefix(\S*)\s?(.*)$/ ) {
+            if( $msg =~ /^\Q$Config::cmd_prefix\E(\S*)\s?(.*)$/ ) {
                 my $cmd = $1;
                 my $args = $2;
 
-                for my $plugin (values %plugins)
-                {
-                    $plugin->process_cmd ($sender, $target, $cmd, $args);
+                if ($cmd eq "help") {
+                    if ($args =~ /^\s*$/) {
+                        Irc::send_privmsg ($target, $Config::help_msg);
+                    }
+                }
+                elsif ($cmd eq "cmds") {
+                    my $msg = "Documented commands: " . join(", ", @cmd_list);
+                    Irc::send_privmsg ($target, $msg);
+                }
+                else {
+                    for my $plugin (values %plugins)
+                    {
+                        $plugin->process_cmd ($sender, $target, $cmd, $args);
+                    }
                 }
             }
             else {
@@ -169,6 +197,9 @@ sub start
 
     # Join the channel.
     send_msg "JOIN $Config::channel";
+
+    # Actually load all plugins.
+    load_plugins();
 
     # Keep reading lines from the server.
     while (my $input = <$sock>) {

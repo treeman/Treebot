@@ -15,5 +15,7 @@ our $channel = "#madeoftree";
 
 our $quit_msg = "Time for my beauty sleep.";
 
-our $cmd_prefix = qr/\./;
+our $cmd_prefix = ".";
+
+our $help_msg = "I'm just a simple bot. Prefix with a '$cmd_prefix' for commands. Type '.cmds' for a list of commands.";
 
