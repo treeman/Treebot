@@ -56,7 +56,10 @@ class Stuff extends DefaultPlugin
                 H[aei]l{1,3}o+|
                 (?:Y[o0]{1,2})+|
                 Tj[ao]|
-                Hi
+                Hi|
+                Yoho|
+                Hoho|
+                håjj\s?håjj
               )
               \s+                 # Mannered men don't use random words after greeting
               $Bot_Config::nick

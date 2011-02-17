@@ -17,9 +17,12 @@ package Irc;
 my $sock;
 my $sock_lock = Thread::Semaphore->new(1);
 
+my $has_connected = 0;
+
 my %plugins;
 my @cmd_list;
 
+# "Automatic" plugin handling
 sub register_plugin;
 sub load_plugins;
 sub unload_plugins;
@@ -39,6 +42,8 @@ sub send_privmsg;
 sub recieve_msg;
 # Parse the recieved message
 sub parse_recieved;
+# Parse the message if we're not logged in
+sub parse_pre_login_recieved;
 # Process the message split into irc parts: prefix, cmd, param
 sub process_irc_msg;
 
@@ -54,6 +59,31 @@ sub process_in_cmd;
 sub start;
 # Will get called when we quit, either by SIGINT or regular quit
 sub quit;
+
+# Regex parsing of useful stuff
+my $match_ping = qr/^PING\s(.*)$/i;
+
+my $match_cmd =
+    qr/
+        ^\Q$Bot_Config::cmd_prefix\E  # cmd prefix
+        (\S*)                         # (1) cmd
+        \s*
+        (.*)                          # (2) args
+    /x;
+
+my $match_irc_msg =
+    qr/
+        ^
+        (?:
+            :(\S+)      # (1) prefix
+            \s
+        )?              # prefix isn't mandatory
+        (\S+)           # (2) cmd
+        \s
+        (.+)            # (3) parameters
+        \r              # irc standard includes carriage return which we don't want
+        $
+    /x;
 
 ## Implementation
 
@@ -174,19 +204,7 @@ sub parse_recieved
         $plugin->process_bare_msg ($msg);
     }
 
-    if ($msg =~ /
-            ^
-            (?:
-               :(\S+) # (1) prefix
-               \s
-            )?        # prefix isn't mandatory
-            (\S+)     # (2) cmd
-            \s
-            (.+)      # (3) parameters
-            \r        # irc standard includes carriage return which we don't want
-            $
-        /x)
-    {
+    if ($msg =~ $match_irc_msg) {
         my $prefix;
         if (!defined ($1)) {
             $prefix = "";
@@ -204,6 +222,42 @@ sub parse_recieved
     }
 }
 
+sub parse_pre_login_recieved
+{
+    my ($input) = @_;
+
+    # Check the numerical responses from the server.
+    if ($input =~ /004/) {
+        # We managed to login, yay!
+
+        $has_connected = 1;
+        # Actually load all plugins.
+        load_plugins();
+
+        # We are now logged in, so join.
+        for my $channel (@Bot_Config::channels)
+        {
+
+            send_msg "JOIN $channel";
+        }
+
+        # Register our nick if we're on quakenet
+        if ($Bot_Config::server =~ /quakenet/) {
+            open my $fh, '<', "Q-pass";
+            my $pass = <$fh>;
+            chomp $pass;
+            send_privmsg
+                "Q\@CServe.quakenet.org",
+                "AUTH $Bot_Config::nick $pass";
+        }
+    }
+    elsif ($input =~ /433/) {
+        # Instead of death try to force use of some random nickname.
+        my $rand_int = int(rand(100));
+        send_msg "NICK $Bot_Config::nick$rand_int";
+    }
+}
+
 sub process_irc_msg
 {
     my ($prefix, $irc_cmd, $param) = @_;
@@ -214,51 +268,82 @@ sub process_irc_msg
     }
 
     if( $irc_cmd =~ /PRIVMSG/ ) {
-        if( $param =~ /^(\S+)\s:(.*)$/ ) {
-            my $target = $1;
-            my $msg = $2;
+        process_privmsg ($prefix, $irc_cmd, $param);
+    }
+}
 
-            $prefix =~ /^(.+?)!~/;
-            my $sender = $1;
+sub process_privmsg
+{
+    my ($prefix, $irc_cmd, $param) = @_;
 
-            # if we're the target change target so we don't message ourselves
-            # this looks pretty bad really, change?
-            if ($target =~ /$Bot_Config::nick/) {
-                $target = $sender;
-            }
+    if( $param =~ /^(\S+)\s:(.*)$/ ) {
+        my $target = $1;
+        my $msg = $2;
 
-            if ($msg =~ /
-                      ^\Q$Bot_Config::cmd_prefix\E  # cmd prefix
-                      (\S*)                     # (1) cmd
-                      \s*
-                      (.*)                      # (2) args
-                    /x)
+        $prefix =~ /^(.+?)!~/;
+        my $sender = $1;
+
+        # if we're the target change target so we don't message ourselves
+        # this looks pretty bad really, change?
+        if ($target =~ /$Bot_Config::nick/) {
+            $target = $sender;
+        }
+
+        if ($msg =~ $match_cmd) {
+            my $cmd = $1;
+            my $args = $2;
+
+            process_privmsg_cmd ($sender, $target, $cmd, $args);
+        }
+        else {
+            for my $plugin (values %plugins)
             {
-                my $cmd = $1;
-                my $args = $2;
+                $plugin->process_privmsg ($sender, $target, $msg);
+            }
+        }
+    }
+}
 
-                if ($cmd eq "help") {
-                    if ($args =~ /^\s*$/) {
-                        Irc::send_privmsg ($target, $Bot_Config::help_msg);
-                    }
-                }
-                elsif ($cmd eq "cmds") {
-                    my $msg = "Documented commands: " . join(", ", @cmd_list);
-                    Irc::send_privmsg ($target, $msg);
-                }
-                else {
-                    for my $plugin (values %plugins)
-                    {
-                        $plugin->process_cmd ($sender, $target, $cmd, $args);
-                    }
-                }
-            }
-            else {
-                for my $plugin (values %plugins)
-                {
-                    $plugin->process_privmsg ($sender, $target, $msg);
-                }
-            }
+sub process_privmsg_cmd
+{
+    my ($sender, $target, $cmd, $args) = @_;
+
+    if ($cmd eq "help") {
+        if ($args =~ /^\s*$/) {
+            Irc::send_privmsg ($target, $Bot_Config::help_msg);
+        }
+    }
+    elsif ($cmd eq "cmds") {
+        my $msg = "Documented commands: " . join(", ", @cmd_list);
+        Irc::send_privmsg ($target, $msg);
+    }
+    else {
+        for my $plugin (values %plugins)
+        {
+            $plugin->process_cmd ($sender, $target, $cmd, $args);
+        }
+    }
+}
+
+sub process_in_cmd
+{
+    my ($cmd, $args) = @_;
+
+    Log::cmd "$cmd $args";
+
+    if ($cmd eq "quit") {
+        main::quit();
+    }
+    elsif ($cmd eq "msg" && $args =~ /(\S+)\s+(.*)/) {
+        my $target = $1;
+        my $msg = $2;
+
+        send_privmsg $target, $msg;
+    }
+    elsif ($has_connected) {
+        for my $plugin (values %plugins)
+        {
+            $plugin->process_cmd ("", "", $cmd, $args);
         }
     }
 }
@@ -284,37 +369,14 @@ sub start
     # and stdin input through queues.
     my $listener = threads->create(\&sock_listener, $queue, $sock);
 
-    my $has_connected = 0;
     while (my $input = $queue->dequeue()) {
         chomp $input;
 
-        if ($input =~ /
-                  ^\Q$Bot_Config::cmd_prefix\E  # cmd prefix
-                  (\S*)                     # (1) cmd
-                  \s*
-                  (.*)                      # (2) args
-                /x)
-        {
+        if ($input =~ $match_cmd) {
             my $cmd = $1;
             my $args = $2;
 
-            Log::cmd "$cmd $args";
-
-            if ($cmd eq "quit") {
-                main::quit();
-            }
-            elsif ($cmd eq "msg" && $args =~ /(\S+)\s+(.*)/) {
-                my $target = $1;
-                my $msg = $2;
-
-                send_privmsg $target, $msg;
-            }
-            elsif ($has_connected) {
-                for my $plugin (values %plugins)
-                {
-                    $plugin->process_cmd ("", "", $cmd, $args);
-                }
-            }
+            process_in_cmd ($cmd, $args);
         }
         else {
             if ($input =~ /^\\(.*)/) {
@@ -323,7 +385,7 @@ sub start
             recieve_msg $input;
 
             # We must respond to PINGs to avoid being disconnected.
-            if ($input =~ /^PING\s(.*)$/i) {
+            if ($input =~ $match_ping) {
                 send_msg "PONG $1";
             }
 
@@ -331,33 +393,7 @@ sub start
                 parse_recieved $input;
             }
             else {
-                # Check the numerical responses from the server.
-                if ($input =~ /004/) {
-                    # Actually load all plugins.
-                    load_plugins();
-
-                    # We are now logged in, so join.
-                    for my $channel (@Bot_Config::channels)
-                    {
-                        $has_connected = 1;
-
-                        send_msg "JOIN $channel";
-                    }
-
-                    # Register our nick if we're on quakenet
-                    if ($Bot_Config::server =~ /quakenet/) {
-                        open my $fh, '<', "Q-pass";
-                        my $pass = <$fh>;
-                        chomp $pass;
-                        send_privmsg "Q\@CServe.quakenet.org",
-                            "AUTH $Bot_Config::nick $pass";
-                    }
-                }
-                elsif ($input =~ /433/) {
-                    # Instead of death try to force use of some random nickname.
-                    my $rand_int = int(rand(100));
-                    send_msg "NICK $Bot_Config::nick$rand_int";
-                }
+                parse_pre_login_recieved $input;
             }
         }
     }

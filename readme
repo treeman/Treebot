@@ -2,6 +2,8 @@
 *id
 
 # Ideas/Commands
+*git
+    lines changed the last day/week/month (extract from git log -p <filename>)
 *botsnack
 *insult/compliment + monkey island retort
 *slap
