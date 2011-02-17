@@ -4,12 +4,11 @@ use Modern::Perl;
 use MooseX::Declare;
 use Test::More;
 
+use threads;
+
 use Log;
-
-push( @INC, '.' );
-
-require "Config.pl";
-require "Irc.pl";
+use Bot_Config;
+use Irc;
 
 # try to load all files in the plugins folder
 my $dirname = "plugin";
@@ -36,11 +35,29 @@ $SIG{INT} = \&quit;
 
 sub quit
 {
+    for my $thr (threads->list()) {
+        $thr->detach();
+    }
+
     print "\n"; # pretty when we ^C
     Irc::unload_plugins();
     Irc::quit();
+
     exit;
 }
+
+#my $irc_start = threads->create(\&Irc::start);
+
+sub in
+{
+    while(<STDIN>) {
+        print $_;
+        #chomp $_;
+        #Irc::send_msg $_;
+    }
+}
+
+my $in = threads->create(\&in);
 
 Irc::start();
 

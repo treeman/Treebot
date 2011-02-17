@@ -4,6 +4,10 @@ use Modern::Perl;
 use MooseX::Declare;
 use IO::Socket;
 
+use threads;
+use threads::shared;
+use Thread::Semaphore;
+
 use Plugin;
 use Log;
 use Bot_Config;
@@ -11,6 +15,7 @@ use Bot_Config;
 package Irc;
 
 my $sock;
+my $sock_lock = Thread::Semaphore->new(0);
 
 my %plugins;
 my @cmd_list;
@@ -18,6 +23,9 @@ my @cmd_list;
 sub register_plugin;
 sub load_plugins;
 sub unload_plugins;
+
+sub read_sock;
+sub write_sock;
 
 sub send_msg;
 sub send_privmsg;
@@ -64,16 +72,44 @@ sub unload_plugins
     %plugins = ();
 }
 
-sub send_msg
+sub write_sock
 {
-    my ($msg) = @_;
+    my $msg = join("", @_);
 
-    if (length($msg) > 0 ) {
-        print $sock "$msg\r\n";
-        Log::sent($msg);
+    if (defined($sock)) {
+        $sock_lock->down();
+            print $sock "$msg\r\n";
+            Log::sent($msg);
+        $sock_lock->up();
     }
     else {
-        Log::error("! trying to send an empty message.");
+        Log::error "Trying to write to sock but it's closed: ", $msg;
+    }
+}
+
+sub read_sock
+{
+    if (defined($sock)) {
+        $sock_lock->down();
+            my $input = <$sock>;
+        $sock_lock->up();
+        return $input;
+    }
+    else {
+        Log::error "Trying to read sock but it's closed";
+        return 0;
+    }
+}
+
+sub send_msg
+{
+    my $msg = join("", @_);
+
+    if (length($msg) > 0 ) {
+        write_sock $msg;
+    }
+    else {
+        Log::error("trying to send an empty message.");
     }
 }
 
@@ -86,8 +122,7 @@ sub send_privmsg
 
 sub recieve_msg
 {
-    my ($msg) = @_;
-    Log::recieved($msg);
+    Log::recieved @_;
 }
 
 sub parse_msg
@@ -191,15 +226,18 @@ sub start
 {
     # Connect to the IRC server.
     $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
-                                    PeerPort => $Bot_Config::port,
-                                    Proto => 'tcp') or
-                                        die "Can't connect\n";
+                                 PeerPort => $Bot_Config::port,
+                                 Proto => 'tcp') or
+                                    die "Can't connect\n";
+
+    # Now the socket is ready for usage.
+    $sock_lock->up();
 
     # Log on to the server.
     send_msg "NICK $Bot_Config::nick";
     send_msg "USER $Bot_Config::username 0 * :$Bot_Config::realname";
 
-    # Read lines from the server until it tells us we have connected.
+    my $has_connected = 0;
     while (my $input = <$sock>) {
         chop $input;
 
@@ -210,39 +248,29 @@ sub start
             send_msg "PONG $1";
         }
 
-        # Check the numerical responses from the server.
-        if ($input =~ /004/) {
-            # We are now logged in.
-            last;
+        if ($has_connected) {
+            parse_msg $input;
         }
-        elsif ($input =~ /433/) {
-            # Instead of death try to force use of some random nickname.
-            my $rand_int = int(rand(100));
-            send_msg "NICK $Bot_Config::nick$rand_int";
+        else {
+            # Check the numerical responses from the server.
+            if ($input =~ /004/) {
+                # We are now logged in, so join.
+                for my $channel (@Bot_Config::channels)
+                {
+                    $has_connected = 1;
+
+                    send_msg "JOIN $channel";
+
+                    # Actually load all plugins.
+                    load_plugins();
+                }
+            }
+            elsif ($input =~ /433/) {
+                # Instead of death try to force use of some random nickname.
+                my $rand_int = int(rand(100));
+                send_msg "NICK $Bot_Config::nick$rand_int";
+            }
         }
-    }
-
-    # Join our channels.
-    for my $channel (@Bot_Config::channels)
-    {
-        send_msg "JOIN $channel";
-    }
-
-    # Actually load all plugins.
-    load_plugins();
-
-    # Keep reading lines from the server.
-    while (my $input = <$sock>) {
-        chop $input;
-
-        recieve_msg $input;
-
-        # We must respond to PINGs to avoid being disconnected.
-        if ($input =~ /^PING\s(.*)$/i) {
-            send_msg "PONG $1";
-        }
-
-        parse_msg $input;
     }
 }
 
