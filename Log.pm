@@ -52,6 +52,9 @@ sub error
 }
 sub recieved
 {
+    # We might think of a prettier solution sometime
+    return if (!$Bot_Config::log_ping && $_[0] =~ /^PING/);
+
     my $msg = "< " . join("", @_);
     say $msg;
 
@@ -60,6 +63,9 @@ sub recieved
 }
 sub sent
 {
+    # We might think of a prettier solution sometime
+    return if (!$Bot_Config::log_pong && $_[0] =~ /^PONG/);
+
     my $msg = "> " . join("", @_);
     say $msg;
 

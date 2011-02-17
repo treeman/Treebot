@@ -380,16 +380,11 @@ sub start
             if ($input =~ /^\\(.*)/) {
                 $input = $1;
             }
+            recieve_msg $input;
 
             # We must respond to PINGs to avoid being disconnected.
             if ($input =~ $match_ping) {
                 send_msg "PONG $1";
-                if ($Bot_Config::log_ping) {
-                    recieve_msg $input;
-                }
-            }
-            else {
-                recieve_msg $input;
             }
 
             if ($has_connected) {
