@@ -15,12 +15,17 @@ use Bot_Config;
 package Irc;
 
 my $sock;
-my $sock_lock = Thread::Semaphore->new(1);
+my $sock_lock = Thread::Semaphore->new(2);
 
 my $has_connected = 0;
 
 my %plugins;
 my @cmd_list;
+
+my @history :shared;
+my $history_lock = Thread::Semaphore->new(1);
+
+my %authed_nicks;
 
 # "Automatic" plugin handling
 sub register_plugin;
@@ -193,6 +198,12 @@ sub send_privmsg
 sub recieve_msg
 {
     Log::recieved @_;
+
+    my ($msg) = join("", @_);
+    $history_lock->down();
+    @history = ($msg, @history);
+    #$#history = 100; # Max history of 100, shouldn't need more
+    $history_lock->up();
 }
 
 sub parse_recieved
@@ -265,8 +276,29 @@ sub process_irc_msg
         $plugin->process_irc_msg ($prefix, $irc_cmd, $param);
     }
 
-    if( $irc_cmd =~ /PRIVMSG/ ) {
+    if ($irc_cmd =~ /PRIVMSG/) {
         process_privmsg ($prefix, $irc_cmd, $param);
+    }
+    # Nick is authed
+    elsif ($irc_cmd =~ /330/) {
+        say "Got a 330!";
+        $param =~ /^\S+\s+(\S+)/;
+        my $nick = $1;
+
+        $authed_nicks{$nick} = 1;
+        if ($authed_nicks{$nick}) {
+            say $nick, " is now a 1.";
+        }
+    }
+    # End of whois
+    elsif ($irc_cmd =~ /318/) {
+        say "Got a 318.";
+        $param =~ /^\S+\s+(\S+)/;
+        my $nick = $1;
+
+        if (!exists($authed_nicks{$nick})) {
+            $authed_nicks{$nick} = 0;
+        }
     }
 }
 
@@ -323,6 +355,13 @@ sub process_privmsg_cmd
     }
 }
 
+sub get_history
+{
+    $history_lock->down();
+    return @history;
+    $history_lock->up();
+}
+
 sub process_in_cmd
 {
     my ($input) = @_;
@@ -347,8 +386,26 @@ sub process_in_cmd
 
             send_privmsg $target, $msg;
         }
+        elsif ($cmd eq "history") {
+            $, = "\n";
+            say @history;
+        }
         elsif ($cmd eq "check") {
+            $args =~ /^(\S+)/;
+            my $nick = $1;
 
+            if (exists($authed_nicks{$nick})) {
+                if ($authed_nicks{$nick}) {
+                    say "Very authed indeed!";
+                }
+                else {
+                    say "Not authed no.";
+                }
+            }
+            else {
+                send_msg "WHOIS $1";
+                say "Try again in a while.";
+            }
         }
         elsif ($has_connected) {
             for my $plugin (values %plugins)
@@ -370,7 +427,7 @@ sub start
                                     die "Can't connect\n";
 
     # Now the socket is ready for usage.
-    $sock_lock->up();
+    $sock_lock->up(2);
 
     # Log on to the server.
     send_msg "NICK $Bot_Config::nick";
