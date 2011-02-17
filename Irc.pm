@@ -279,6 +279,8 @@ sub start
             my $cmd = $1;
             my $args = $2;
 
+            Log::cmd "$cmd $args";
+
             if ($cmd eq "quit") {
                 main::quit();
             }

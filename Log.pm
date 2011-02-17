@@ -25,10 +25,21 @@ sub get_log_file
     return $fh;
 }
 
+sub cmd
+{
+    my $msg = ". " . join("", @_);
+
+    my $fh = get_log_file();
+    say $fh $msg;
+}
+
 sub out
 {
     my $msg = ": " . join("", @_);
     say $msg;
+
+    my $fh = get_log_file();
+    say $fh $msg;
 }
 
 sub error
