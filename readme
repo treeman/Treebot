@@ -1,20 +1,33 @@
 ﻿# Implemented
 *id
+*botsnack
+*git
+    current commit
+*log
+*cmds
+    add synnonym commands
+    list all commands
 
 # Ideas/Commands
+*admin
+    add checking for admin commands
+    add end of whois command queue for triggering
+    add checks for when nick quits, need to recheck for auth
+    add nicknames for admin (who should be authed)
+    auto-op admins if we can
 *git
     lines changed the last day/week/month (extract from git log -p <filename>)
-*botsnack
+*undocumentedcmds
 *insult/compliment + monkey island retort
 *slap
 *help
+    individual help messages
 *kolli
     check a package location
 *tell
     tell a user something when he comes online
 *activity
-    how much the bot hass been used
-*log
+    how much the bot has been used
 *quotes
     Duke
     Monkey Island
@@ -29,11 +42,8 @@
 *polls
 *eval
 *brainfuck
-*auto-op me
 *lambdabot system
 *imdb
-*commands
-    list all commands
 *day9
 *sc2casts
 *sc2 stats
