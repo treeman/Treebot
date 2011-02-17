@@ -52,7 +52,16 @@ sub in
 {
     while(<STDIN>) {
         chomp $_;
-        $queue->enqueue($_);
+        if (/^\./) {
+            # If it's the command it will be taken care of
+            $queue->enqueue($_);
+        }
+        else {
+            # Differentiate from recieved commands
+            # this will be sent raw, except the !
+            $_ = "!" . $_;
+            $queue->enqueue($_);
+        }
     }
 }
 

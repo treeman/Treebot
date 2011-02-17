@@ -52,7 +52,7 @@ sub process_privmsg;
 
 # Process a bot command which came from irc
 sub process_privmsg_cmd;
-# Process a command from stdin
+# Process a input from stdin
 sub process_in_cmd;
 
 # Main function which connects and waits for events
@@ -325,23 +325,36 @@ sub process_privmsg_cmd
 
 sub process_in_cmd
 {
-    my ($cmd, $args) = @_;
+    my ($input) = @_;
 
-    Log::cmd "$cmd $args";
-
-    if ($cmd eq "quit") {
-        main::quit();
+    # If prefixed with a '!' we should just send the text raw to the server.
+    if ($input =~ /^!(.*)/) {
+        send_msg $1;
     }
-    elsif ($cmd eq "msg" && $args =~ /(\S+)\s+(.*)/) {
-        my $target = $1;
-        my $msg = $2;
+    # Else it should look like a regular command.
+    elsif ($input =~ $match_cmd) {
+        my $cmd = $1;
+        my $args = $2;
 
-        send_privmsg $target, $msg;
-    }
-    elsif ($has_connected) {
-        for my $plugin (values %plugins)
-        {
-            $plugin->process_cmd ("", "", $cmd, $args);
+        Log::cmd" $cmd $args";
+
+        if ($cmd eq "quit") {
+            main::quit();
+        }
+        elsif ($cmd eq "msg" && $args =~ /(\S+)\s+(.*)/) {
+            my $target = $1;
+            my $msg = $2;
+
+            send_privmsg $target, $msg;
+        }
+        elsif ($cmd eq "check") {
+
+        }
+        elsif ($has_connected) {
+            for my $plugin (values %plugins)
+            {
+                $plugin->process_cmd ("", "", $cmd, $args);
+            }
         }
     }
 }
@@ -370,11 +383,8 @@ sub start
     while (my $input = $queue->dequeue()) {
         chomp $input;
 
-        if ($input =~ $match_cmd) {
-            my $cmd = $1;
-            my $args = $2;
-
-            process_in_cmd ($cmd, $args);
+        if ($input =~ /^[!.]/) {
+            process_in_cmd ($input);
         }
         else {
             if ($input =~ /^\\(.*)/) {
