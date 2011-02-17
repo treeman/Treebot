@@ -62,6 +62,8 @@ sub load_plugins
 
     push(@cmd_list, "cmds");
     push(@cmd_list, "help");
+
+    @cmd_list = sort(@cmd_list);
 }
 
 sub unload_plugins
@@ -181,7 +183,7 @@ sub parse_msg
         process_msg($prefix, $cmd, $param);
     }
     else {
-        Log::error("! peculiar, we couldn't capture the message: ", $msg);
+        Log::error("Peculiar, we couldn't capture the message: ", $msg);
     }
 }
 
@@ -290,7 +292,7 @@ sub start
 
                 send_privmsg $target, $msg;
             }
-            else {
+            elsif ($has_connected) {
                 for my $plugin (values %plugins)
                 {
                     $plugin->process_cmd ("", "", $cmd, $args);
@@ -314,15 +316,24 @@ sub start
             else {
                 # Check the numerical responses from the server.
                 if ($input =~ /004/) {
+                    # Actually load all plugins.
+                    load_plugins();
+
                     # We are now logged in, so join.
                     for my $channel (@Bot_Config::channels)
                     {
                         $has_connected = 1;
 
                         send_msg "JOIN $channel";
+                    }
 
-                        # Actually load all plugins.
-                        load_plugins();
+                    # Register our nick if we're on quakenet
+                    if ($Bot_Config::server =~ /quakenet/) {
+                        open my $fh, '<', "Q-pass";
+                        my $pass = <$fh>;
+                        chomp $pass;
+                        send_privmsg "Q\@CServe.quakenet.org",
+                            "AUTH $Bot_Config::nick $pass";
                     }
                 }
                 elsif ($input =~ /433/) {
@@ -337,7 +348,6 @@ sub start
 
 sub quit
 {
-    say "I wanna quit!";
     send_msg ("QUIT :$Bot_Config::quit_msg");
 }
 

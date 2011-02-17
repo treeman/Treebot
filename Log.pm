@@ -27,7 +27,7 @@ sub get_log_file
 
 sub cmd
 {
-    my $msg = ". " . join("", @_);
+    my $msg = "." . join("", @_);
 
     my $fh = get_log_file();
     say $fh $msg;

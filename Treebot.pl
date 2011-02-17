@@ -36,19 +36,15 @@ $SIG{INT} = \&quit;
 
 sub quit
 {
-    say "Quitting!";
     for my $thr (threads->list()) {
         $thr->detach();
     }
 
-    print "\n"; # pretty when we ^C
     Irc::unload_plugins();
     Irc::quit();
 
     exit;
 }
-
-#my $irc_start = threads->create(\&Irc::start);
 
 my $queue = Thread::Queue->new();
 
