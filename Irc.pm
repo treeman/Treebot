@@ -24,18 +24,35 @@ sub register_plugin;
 sub load_plugins;
 sub unload_plugins;
 
+# Locking down the socket for operations
 sub read_sock;
 sub write_sock;
+# Our sock listening, should start in it's own thread
 sub sock_listener;
 
+# Send something to the server
 sub send_msg;
+# Send a PRIVMSG to the server
 sub send_privmsg;
 
+# When we've recieved a message
 sub recieve_msg;
-sub parse_msg;
-sub process_msg;
+# Parse the recieved message
+sub parse_recieved;
+# Process the message split into irc parts: prefix, cmd, param
+sub process_irc_msg;
 
+# We've recieved a PRIVMSG
+sub process_privmsg;
+
+# Process a bot command which came from irc
+sub process_privmsg_cmd;
+# Process a command from stdin
+sub process_in_cmd;
+
+# Main function which connects and waits for events
 sub start;
+# Will get called when we quit, either by SIGINT or regular quit
 sub quit;
 
 ## Implementation
@@ -148,7 +165,7 @@ sub recieve_msg
     Log::recieved @_;
 }
 
-sub parse_msg
+sub parse_recieved
 {
     my ($msg) = @_;
 
@@ -157,7 +174,7 @@ sub parse_msg
         $plugin->process_bare_msg ($msg);
     }
 
-    if( $msg =~ /
+    if ($msg =~ /
             ^
             (?:
                :(\S+) # (1) prefix
@@ -166,9 +183,9 @@ sub parse_msg
             (\S+)     # (2) cmd
             \s
             (.+)      # (3) parameters
-            \r        # irc standard includes carriage return :<
+            \r        # irc standard includes carriage return which we don't want
             $
-        /x )
+        /x)
     {
         my $prefix;
         if (!defined ($1)) {
@@ -180,14 +197,14 @@ sub parse_msg
         my $cmd = $2;
         my $param = $3;
 
-        process_msg($prefix, $cmd, $param);
+        process_irc_msg($prefix, $cmd, $param);
     }
     else {
         Log::error("Peculiar, we couldn't capture the message: ", $msg);
     }
 }
 
-sub process_msg
+sub process_irc_msg
 {
     my ($prefix, $irc_cmd, $param) = @_;
 
@@ -311,7 +328,7 @@ sub start
             }
 
             if ($has_connected) {
-                parse_msg $input;
+                parse_recieved $input;
             }
             else {
                 # Check the numerical responses from the server.
