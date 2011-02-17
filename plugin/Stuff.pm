@@ -12,7 +12,7 @@ class Stuff extends DefaultPlugin
 {
     override load
     {
-        #$self->started = localtime;
+        $self->started(time);
     }
 
     override module_cmds
@@ -94,7 +94,7 @@ class Stuff extends DefaultPlugin
         }
     }
 
-    has 'started', is => 'rw', default => time;
+    has 'started', is => 'rw';
 }
 
 1;
