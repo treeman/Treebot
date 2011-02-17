@@ -15,7 +15,7 @@ use Bot_Config;
 package Irc;
 
 my $sock;
-my $sock_lock = Thread::Semaphore->new(0);
+my $sock_lock = Thread::Semaphore->new(1);
 
 my %plugins;
 my @cmd_list;
@@ -26,6 +26,7 @@ sub unload_plugins;
 
 sub read_sock;
 sub write_sock;
+sub sock_listener;
 
 sub send_msg;
 sub send_privmsg;
@@ -72,8 +73,24 @@ sub unload_plugins
     %plugins = ();
 }
 
+sub read_sock
+{
+    my $sock = shift;
+    if (defined($sock)) {
+        $sock_lock->down();
+            my $input = <$sock>;
+        $sock_lock->up();
+        return $input;
+    }
+    else {
+        Log::error "Trying to read sock but it's closed";
+        return 0;
+    }
+}
+
 sub write_sock
 {
+    my $sock = shift;
     my $msg = join("", @_);
 
     if (defined($sock)) {
@@ -87,17 +104,15 @@ sub write_sock
     }
 }
 
-sub read_sock
+sub sock_listener
 {
-    if (defined($sock)) {
-        $sock_lock->down();
-            my $input = <$sock>;
-        $sock_lock->up();
-        return $input;
-    }
-    else {
-        Log::error "Trying to read sock but it's closed";
-        return 0;
+    my ($queue, $sock) = @_;
+    while(my $input = read_sock($sock)) {
+        # Prevent the server from being confused with our own input commands
+        if ($input =~ /^\Q$Bot_Config::cmd_prefix\E/) {
+            $input = "\\$input";
+        }
+        $queue->enqueue($input);
     }
 }
 
@@ -106,7 +121,7 @@ sub send_msg
     my $msg = join("", @_);
 
     if (length($msg) > 0 ) {
-        write_sock $msg;
+        write_sock($sock, $msg);
     }
     else {
         Log::error("trying to send an empty message.");
@@ -117,7 +132,13 @@ sub send_privmsg
 {
     my ($target, $msg) = @_;
 
-    send_msg ("PRIVMSG $target :$msg");
+    # If target is empty it's to the commandline
+    if ($target eq "") {
+        Log::out $msg;
+    }
+    else {
+        send_msg ("PRIVMSG $target :$msg");
+    }
 }
 
 sub recieve_msg
@@ -192,7 +213,8 @@ sub process_msg
                       (\S*)                     # (1) cmd
                       \s*
                       (.*)                      # (2) args
-                    /x) {
+                    /x)
+            {
                 my $cmd = $1;
                 my $args = $2;
 
@@ -224,6 +246,8 @@ sub process_msg
 
 sub start
 {
+    my ($queue) = @_;
+
     # Connect to the IRC server.
     $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
                                  PeerPort => $Bot_Config::port,
@@ -237,38 +261,73 @@ sub start
     send_msg "NICK $Bot_Config::nick";
     send_msg "USER $Bot_Config::username 0 * :$Bot_Config::realname";
 
+    # Worker thread so we can handle both socket input
+    # and stdin input through queues.
+    my $listener = threads->create(\&sock_listener, $queue, $sock);
+
     my $has_connected = 0;
-    while (my $input = <$sock>) {
-        chop $input;
+    while (my $input = $queue->dequeue()) {
+        chomp $input;
 
-        recieve_msg $input;
+        if ($input =~ /
+                  ^\Q$Bot_Config::cmd_prefix\E  # cmd prefix
+                  (\S*)                     # (1) cmd
+                  \s*
+                  (.*)                      # (2) args
+                /x)
+        {
+            my $cmd = $1;
+            my $args = $2;
 
-        # We must respond to PINGs to avoid being disconnected.
-        if ($input =~ /^PING\s(.*)$/i) {
-            send_msg "PONG $1";
-        }
+            if ($cmd eq "quit") {
+                main::quit();
+            }
+            elsif ($cmd eq "msg" && $args =~ /(\S+)\s+(.*)/) {
+                my $target = $1;
+                my $msg = $2;
 
-        if ($has_connected) {
-            parse_msg $input;
-        }
-        else {
-            # Check the numerical responses from the server.
-            if ($input =~ /004/) {
-                # We are now logged in, so join.
-                for my $channel (@Bot_Config::channels)
+                send_privmsg $target, $msg;
+            }
+            else {
+                for my $plugin (values %plugins)
                 {
-                    $has_connected = 1;
-
-                    send_msg "JOIN $channel";
-
-                    # Actually load all plugins.
-                    load_plugins();
+                    $plugin->process_cmd ("", "", $cmd, $args);
                 }
             }
-            elsif ($input =~ /433/) {
-                # Instead of death try to force use of some random nickname.
-                my $rand_int = int(rand(100));
-                send_msg "NICK $Bot_Config::nick$rand_int";
+        }
+        else {
+            if ($input =~ /^\\(.*)/) {
+                $input = $1;
+            }
+            recieve_msg $input;
+
+            # We must respond to PINGs to avoid being disconnected.
+            if ($input =~ /^PING\s(.*)$/i) {
+                send_msg "PONG $1";
+            }
+
+            if ($has_connected) {
+                parse_msg $input;
+            }
+            else {
+                # Check the numerical responses from the server.
+                if ($input =~ /004/) {
+                    # We are now logged in, so join.
+                    for my $channel (@Bot_Config::channels)
+                    {
+                        $has_connected = 1;
+
+                        send_msg "JOIN $channel";
+
+                        # Actually load all plugins.
+                        load_plugins();
+                    }
+                }
+                elsif ($input =~ /433/) {
+                    # Instead of death try to force use of some random nickname.
+                    my $rand_int = int(rand(100));
+                    send_msg "NICK $Bot_Config::nick$rand_int";
+                }
             }
         }
     }
@@ -276,6 +335,7 @@ sub start
 
 sub quit
 {
+    say "I wanna quit!";
     send_msg ("QUIT :$Bot_Config::quit_msg");
 }
 

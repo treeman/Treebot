@@ -5,6 +5,7 @@ use MooseX::Declare;
 use Test::More;
 
 use threads;
+use Thread::Queue;
 
 use Log;
 use Bot_Config;
@@ -35,6 +36,7 @@ $SIG{INT} = \&quit;
 
 sub quit
 {
+    say "Quitting!";
     for my $thr (threads->list()) {
         $thr->detach();
     }
@@ -48,16 +50,17 @@ sub quit
 
 #my $irc_start = threads->create(\&Irc::start);
 
+my $queue = Thread::Queue->new();
+
 sub in
 {
     while(<STDIN>) {
-        print $_;
-        #chomp $_;
-        #Irc::send_msg $_;
+        chomp $_;
+        $queue->enqueue($_);
     }
 }
 
 my $in = threads->create(\&in);
 
-Irc::start();
+Irc::start($queue);
 
