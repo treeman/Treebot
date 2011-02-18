@@ -1,4 +1,7 @@
-﻿# Implemented
+﻿# Bugs
+*^C hangs on stdin getline, quits after enter
+
+# Implemented
 *id
 *botsnack
 *git
@@ -7,6 +10,10 @@
 *cmds
     add synnonym commands
     list all commands
+*uptime
+*hello
+*status
+    I'm a teapot
 
 # Ideas/Commands
 *admin
@@ -15,8 +22,11 @@
     add checks for when nick quits, need to recheck for auth
     add nicknames for admin (who should be authed)
     auto-op admins if we can
+*plugins
+    commands for loading/unloading/reloading plugins!
 *git
     lines changed the last day/week/month (extract from git log -p <filename>)
+    pull master origin, or others
 *undocumentedcmds
 *insult/compliment + monkey island retort
 *slap

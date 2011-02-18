@@ -27,6 +27,9 @@ my $history_lock = Thread::Semaphore->new(1);
 
 my %authed_nicks;
 
+my $queue;
+my @whois_hooks;
+
 # "Automatic" plugin handling
 sub register_plugin;
 sub load_plugins;
@@ -54,7 +57,6 @@ sub process_irc_msg;
 
 # We've recieved a PRIVMSG
 sub process_privmsg;
-
 # Process a bot command which came from irc
 sub process_privmsg_cmd;
 # Process a input from stdin
@@ -240,8 +242,8 @@ sub parse_pre_login_recieved
     # Check the numerical responses from the server.
     if ($input =~ /004/) {
         # We managed to login, yay!
-
         $has_connected = 1;
+
         # Actually load all plugins.
         load_plugins();
 
@@ -293,12 +295,19 @@ sub process_irc_msg
     # End of whois
     elsif ($irc_cmd =~ /318/) {
         say "Got a 318.";
+
         $param =~ /^\S+\s+(\S+)/;
         my $nick = $1;
 
         if (!exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = 0;
         }
+
+        # Issue whois commands
+        for my $msg (@whois_hooks) {
+            $queue->enqueue($msg);
+        }
+        @whois_hooks = ();
     }
 }
 
@@ -343,7 +352,7 @@ sub process_privmsg_cmd
             Irc::send_privmsg ($target, $Bot_Config::help_msg);
         }
     }
-    elsif ($cmd eq "cmds") {
+    elsif ($cmd =~ /^cmds|commands$/) {
         my $msg = "Documented commands: " . join(", ", @cmd_list);
         Irc::send_privmsg ($target, $msg);
     }
@@ -404,7 +413,8 @@ sub process_in_cmd
             }
             else {
                 send_msg "WHOIS $1";
-                say "Try again in a while.";
+                #say "Try again in a while.";
+                #$queue->enqueue($input);
             }
         }
         elsif ($has_connected) {
@@ -418,7 +428,8 @@ sub process_in_cmd
 
 sub start
 {
-    my ($queue) = @_;
+    #my ($queue) = @_;
+    ($queue) = @_;
 
     # Connect to the IRC server.
     $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
