@@ -66,11 +66,14 @@ class Stuff extends DefaultPlugin
               (                   # Of course some exclamationmarks are cool
                 [!\?\s]*
               )
-              (?:!+1+one)?        # Match the wonderful !!!!!11one
+              (!+1+one)?        # Match the wonderful !!!!!11one
               $
             /ix)
         {
-            if (length($2) > 3) {
+            if (defined($3) ) {
+                Irc::send_privmsg ($target, "$1 $sender$2$3");
+            }
+            elsif (length($2) > 3) {
                 Irc::send_privmsg ($target, "Mature $sender...");
             }
             else {

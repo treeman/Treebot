@@ -47,9 +47,9 @@ use Thread::Semaphore;
 my $semaphore = Thread::Semaphore->new();
 my $v :shared = 0;
 
-my $thr1 = threads->create(\&sample, 1);
-my $thr2 = threads->create(\&sample, 2);
-my $thr3 = threads->create(\&sample, 3);
+#my $thr1 = threads->create(\&sample, 1);
+#my $thr2 = threads->create(\&sample, 2);
+#my $thr3 = threads->create(\&sample, 3);
 
 sub sample {
     my $num = shift(@_);
@@ -67,7 +67,39 @@ sub sample {
     }
 }
 
-$thr1->join();
-$thr2->join();
-$thr3->join();
+#$thr1->join();
+#$thr2->join();
+#$thr3->join();
+
+my @my_hooks;
+
+sub f1 { say "f1"; }
+sub f2 { say "f2"; }
+sub f3 { say "f3"; }
+
+push (@my_hooks, 1, \&f1);
+push (@my_hooks, 2, \&f2);
+push (@my_hooks, 3, \&f3);
+
+sub do_hook
+{
+    my ($arg) = @_;
+
+    for (my $i = 0; $i < scalar @my_hooks; $i += 2) {
+        if ($my_hooks[$i] == $arg) {
+            my $id = $my_hooks[$i];
+            my $f = $my_hooks[$i + 1];
+
+            $f->();
+
+            @my_hooks = splice( @my_hooks, $i, 2 );
+        }
+    }
+}
+
+do_hook( 2 );
+#do_hook();
+#do_hook();
+
+length(@my_hooks);
 

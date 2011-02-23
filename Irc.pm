@@ -27,8 +27,14 @@ my $history_lock = Thread::Semaphore->new(1);
 
 my %authed_nicks;
 
-my $queue;
-my @whois_hooks;
+my $in_queue;
+my $out_queue = Thread::Queue->new();
+
+# Pairs of code to match against and the function reference to call when it happens
+my @code_hooks;
+
+# Worker threads for dispatching commands
+my @workers;
 
 # "Automatic" plugin handling
 sub register_plugin;
@@ -37,14 +43,25 @@ sub unload_plugins;
 
 # Locking down the socket for operations
 sub read_sock;
-sub write_sock;
 # Our sock listening, should start in it's own thread
 sub sock_listener;
 
-# Send something to the server
+# Place message in $in_queue
+sub write_sock;
+# Sends all messages in $in_queue for writing, should be a thread
+sub socket_writer;
+# Lock down socket and write
+sub output_to_sock;
+
+# Format and send a string to the server
 sub send_msg;
 # Send a PRIVMSG to the server
 sub send_privmsg;
+
+# Add a callback hook (code to match, function to call)
+sub hook_at_code;
+# Call, and remove, from code_hooks if the code matches (code, params-to-func)
+sub call_code_hook;
 
 # When we've recieved a message
 sub recieve_msg;
@@ -60,7 +77,7 @@ sub process_privmsg;
 # Process a bot command which came from irc
 sub process_privmsg_cmd;
 # Process a input from stdin
-sub process_in_cmd;
+sub process_admin_cmd;
 
 # Main function which connects and waits for events
 sub start;
@@ -144,7 +161,36 @@ sub read_sock
     }
 }
 
+sub sock_listener
+{
+    my ($in_queue, $sock) = @_;
+    while(my $input = read_sock($sock)) {
+        # Prevent the server from being confused with our own input commands
+        if ($input =~ /^\Q$Bot_Config::cmd_prefix\E/) {
+            $input = "\\$input";
+        }
+        $in_queue->enqueue($input);
+    }
+}
+
 sub write_sock
+{
+    my ($msg) = @_;
+
+    $out_queue->enqueue ($msg);
+}
+
+sub socket_writer
+{
+    my $sock = shift;
+
+    while(my $msg = $out_queue->dequeue()) {
+        chomp $msg;
+        output_to_sock ($sock, $msg);
+    }
+}
+
+sub output_to_sock
 {
     my $sock = shift;
     my $msg = join("", @_);
@@ -160,24 +206,13 @@ sub write_sock
     }
 }
 
-sub sock_listener
-{
-    my ($queue, $sock) = @_;
-    while(my $input = read_sock($sock)) {
-        # Prevent the server from being confused with our own input commands
-        if ($input =~ /^\Q$Bot_Config::cmd_prefix\E/) {
-            $input = "\\$input";
-        }
-        $queue->enqueue($input);
-    }
-}
-
 sub send_msg
 {
     my $msg = join("", @_);
 
     if (length($msg) > 0 ) {
-        write_sock($sock, $msg);
+        #write_sock($sock, $msg);
+        write_sock($msg);
     }
     else {
         Log::error("trying to send an empty message.");
@@ -194,6 +229,30 @@ sub send_privmsg
     }
     else {
         send_msg ("PRIVMSG $target :$msg");
+    }
+}
+
+sub hook_at_code
+{
+    my ($code, $callback) = @_;
+
+    push (@code_hooks, $code);
+    push (@code_hooks, $callback);
+}
+
+sub call_code_hook
+{
+    my $code = shift @_;
+
+    for (my $i = 0; $i < length (@code_hooks); $i += 2) {
+        if ($code_hooks[$i] == $code) {
+            my $id = $code_hooks[$i];
+            my $f = $code_hooks[$i + 1];
+
+            $f->();
+
+            @code_hooks = splice( @code_hooks, $i, 2 );
+        }
     }
 }
 
@@ -262,11 +321,11 @@ sub parse_pre_login_recieved
                 "AUTH $Bot_Config::nick $pass";
         }
     }
-    elsif ($input =~ /433/) {
+    #elsif ($input =~ /433/) {
         # Instead of death try to force use of some random nickname.
-        my $rand_int = int(rand(100));
-        send_msg "NICK $Bot_Config::nick$rand_int";
-    }
+    #    my $rand_int = int(rand(100));
+    #    send_msg "NICK $Bot_Config::nick$rand_int";
+    #}
 }
 
 sub process_irc_msg
@@ -302,12 +361,6 @@ sub process_irc_msg
         if (!exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = 0;
         }
-
-        # Issue whois commands
-        for my $msg (@whois_hooks) {
-            $queue->enqueue($msg);
-        }
-        @whois_hooks = ();
     }
 }
 
@@ -371,7 +424,7 @@ sub get_history
     $history_lock->up();
 }
 
-sub process_in_cmd
+sub process_admin_cmd
 {
     my ($input) = @_;
 
@@ -414,7 +467,7 @@ sub process_in_cmd
             else {
                 send_msg "WHOIS $1";
                 #say "Try again in a while.";
-                #$queue->enqueue($input);
+                #$in_queue->enqueue($input);
             }
         }
         elsif ($has_connected) {
@@ -428,8 +481,8 @@ sub process_in_cmd
 
 sub start
 {
-    #my ($queue) = @_;
-    ($queue) = @_;
+    #my ($in_queue) = @_;
+    ($in_queue) = @_;
 
     # Connect to the IRC server.
     $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
@@ -446,13 +499,19 @@ sub start
 
     # Worker thread so we can handle both socket input
     # and stdin input through queues.
-    my $listener = threads->create(\&sock_listener, $queue, $sock);
+    my $listener = threads->create(\&sock_listener, $in_queue, $sock);
 
-    while (my $input = $queue->dequeue()) {
+    # Worker who outputs everything from the $out_queue to the socket
+    # so we can write to socket from other threads
+    my $writer = threads->create(\&socket_writer, $sock);
+
+    while (my $input = $in_queue->dequeue()) {
         chomp $input;
 
         if ($input =~ /^[!.]/) {
-            process_in_cmd ($input);
+            process_admin_cmd ($input);
+            #my $thr = threads->create( \&process_in_cmd, $input );
+            #push (@workers, $thr);
         }
         else {
             if ($input =~ /^\\(.*)/) {
@@ -467,9 +526,13 @@ sub start
 
             if ($has_connected) {
                 parse_recieved $input;
+                #my $thr = threads->create( \&parse_recieved, $input );
+                #push (@workers, $thr);
             }
             else {
                 parse_pre_login_recieved $input;
+                #my $thr = threads->create( \&parse_pre_login_recieved, $input );
+                #push (@workers, $thr);
             }
         }
     }

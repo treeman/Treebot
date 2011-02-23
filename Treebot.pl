@@ -11,6 +11,9 @@ use Log;
 use Bot_Config;
 use Irc;
 
+
+my $in_queue = Thread::Queue->new();
+
 # try to load all files in the plugins folder
 my $dirname = "plugin";
 
@@ -46,26 +49,28 @@ sub quit
     exit;
 }
 
-my $queue = Thread::Queue->new();
-
 sub in
 {
     while(<STDIN>) {
         chomp $_;
         if (/^\./) {
             # If it's the command it will be taken care of
-            $queue->enqueue($_);
+            #$in_queue->enqueue($_);
+            Irc::process_admin_cmd ($_);
+        }
+        elsif (/^<\s*(.*)/) {
+            # Act like we recieve it from the socket
+            say "~ $1";
+            $in_queue->enqueue("$1\r\n");
         }
         else {
-            # Differentiate from recieved commands
-            # this will be sent raw, except the !
-            $_ = "!" . $_;
-            $queue->enqueue($_);
+            # If it's not a command we just pipe it to the server
+            Irc::send_msg ($_);
         }
     }
 }
 
 my $in = threads->create(\&in);
 
-Irc::start($queue);
+Irc::start($in_queue);
 
