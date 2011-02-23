@@ -47,6 +47,14 @@ class Stuff extends DefaultPlugin
 
             Irc::send_privmsg ($target, $msg);
         }
+        elsif ($cmd eq "pew") {
+            if (Irc::is_admin ($sender)) {
+                Irc::send_privmsg ($target, "IMBALAZOR!!!!");
+            }
+            else {
+                Irc::send_privmsg ($target, "pew..");
+            }
+        }
     }
 
     override process_privmsg ($sender, $target, $msg)

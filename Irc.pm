@@ -93,25 +93,7 @@ sub start;
 sub quit;
 
 # Cannot run in the same thread as a listener, will sleep
-sub is_authed
-{
-    my ($nick) = @_;
-
-    while (1) {
-        if (exists($authed_nicks{$nick})) {
-            if ($authed_nicks{$nick}) {
-                return 1;
-            }
-            else {
-                return 0;
-            }
-        }
-        else {
-            send_msg "WHOIS $nick";
-            sleep 3;
-        }
-    }
-}
+sub is_authed;
 
 # Regex parsing of useful stuff
 my $match_ping = qr/^PING\s(.*)$/i;
@@ -404,26 +386,54 @@ sub process_irc_msg
     }
     # Nick is authed
     elsif ($irc_cmd =~ /330/) {
-        say "Got a 330!";
-        $param =~ /^\S+\s+(\S+)/;
+        $param =~ /^\S+\s+(\S+)\s+(\S+)/;
         my $nick = $1;
+        my $authed_nick = $2;
 
-        $authed_nicks{$nick} = 1;
-        if ($authed_nicks{$nick}) {
-            say $nick, " is now a 1.";
-        }
+        $authed_nicks{$nick} = $authed_nick;
     }
     # End of whois
     elsif ($irc_cmd =~ /318/) {
-        say "Got a 318.";
-
         $param =~ /^\S+\s+(\S+)/;
         my $nick = $1;
 
-        if (!exists($authed_nicks{$nick})) {
+        # If no entry, he isn't authed
+        if (!defined($authed_nicks{$nick})) {
             $nick_lock->down();
                 $authed_nicks{$nick} = 0;
             $nick_lock->up();
+        }
+    }
+    elsif ($irc_cmd =~ /QUIT/) {
+        $prefix =~ /^(.+?)!~/;
+        my $nick = $1;
+
+        # If entry exists, set it to 0
+        if (exists($authed_nicks{$nick})) {
+            $authed_nicks{$nick} = 0;
+        }
+    }
+    elsif ($irc_cmd =~ /JOIN/) {
+        $prefix =~ /^(.+?)!~/;
+        my $nick = $1;
+
+        # If we have an entry of this fellaw, undef it so we must check it again
+        if (exists($authed_nicks{$nick})) {
+            $authed_nicks{$nick} = undef;
+        }
+    }
+    elsif ($irc_cmd =~ /NICK/) {
+        $prefix =~ /^(.+?)!~/;
+        my $old_nick = $1;
+
+        $param =~ /^:(.*)/;
+        my $new_nick = $1;
+
+        say "swapping nicks: $old_nick $new_nick";
+
+        if (exists($authed_nicks{$old_nick})) {
+            $authed_nicks{$new_nick} = $authed_nicks{$old_nick};
+            $authed_nicks{$old_nick} = undef;
         }
     }
 }
@@ -515,6 +525,17 @@ sub process_admin_cmd
                 say "Nope, no auth there!";
             }
         }
+        elsif ($cmd eq "admin") {
+            $args =~ /^(\S+)/;
+            my $nick = $1;
+
+            if (is_admin ($nick) ) {
+                say "Very admin indeed!";
+            }
+            else {
+                say "Nope, no admin there!";
+            }
+        }
         elsif ($has_connected) {
             for my $plugin (values %plugins)
             {
@@ -575,6 +596,45 @@ sub start
 sub quit
 {
     send_msg ("QUIT :$Bot_Config::quit_msg");
+}
+
+sub is_authed
+{
+    my ($nick) = @_;
+    my $whois_sent = 0;
+
+    while (1) {
+        if (defined($authed_nicks{$nick})) {
+            if ($authed_nicks{$nick}) {
+                return 1;
+            }
+            else {
+                return 0;
+            }
+        }
+        elsif (!$whois_sent) {
+            send_msg "WHOIS $nick";
+            sleep 1;
+        }
+        else {
+            sleep 1;
+        }
+    }
+}
+
+sub is_admin
+{
+    my ($nick) = @_;
+
+    if (is_authed ($nick)) {
+        my $authed_nick = $authed_nicks{$nick};
+        for my $admin (@Bot_Config::admins) {
+            if ($admin eq $authed_nick) {
+                return 1;
+            }
+        }
+    }
+    return 0;
 }
 
 1;

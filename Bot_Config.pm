@@ -23,5 +23,7 @@ our $log_dir = "logs/";
 our $log_ping = 0;
 our $log_pong = 0;
 
+our @admins = ('Mowah');
+
 1;
 
