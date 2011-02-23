@@ -17,7 +17,7 @@ package Irc;
 my $sock;
 my $sock_lock = Thread::Semaphore->new(2);
 
-my $has_connected = 0;
+my $has_connected :shared = 0;
 
 my %plugins;
 my @cmd_list;
@@ -25,9 +25,10 @@ my @cmd_list;
 my @history :shared;
 my $history_lock = Thread::Semaphore->new(1);
 
-my %authed_nicks;
+my %authed_nicks :shared;
+my $nick_lock = Thread::Semaphore->new(1);
 
-my $in_queue;
+my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
 
 # Pairs of code to match against and the function reference to call when it happens
@@ -36,10 +37,16 @@ my @code_hooks;
 # Worker threads for dispatching commands
 my @workers;
 
+# Create a worker thread and store it in workers
+sub create_cmd_worker;
+
 # "Automatic" plugin handling
 sub register_plugin;
 sub load_plugins;
 sub unload_plugins;
+
+# Thread for listening to stdin and dispatching cmds and stuff
+sub stdin_listener;
 
 # Locking down the socket for operations
 sub read_sock;
@@ -74,15 +81,37 @@ sub process_irc_msg;
 
 # We've recieved a PRIVMSG
 sub process_privmsg;
-# Process a bot command which came from irc
-sub process_privmsg_cmd;
-# Process a input from stdin
+
+# Process a bot command, should be a thread
+sub process_cmd;
+# Process an admin command, should be in a non main-thread
 sub process_admin_cmd;
 
 # Main function which connects and waits for events
 sub start;
 # Will get called when we quit, either by SIGINT or regular quit
 sub quit;
+
+# Cannot run in the same thread as a listener, will sleep
+sub is_authed
+{
+    my ($nick) = @_;
+
+    while (1) {
+        if (exists($authed_nicks{$nick})) {
+            if ($authed_nicks{$nick}) {
+                return 1;
+            }
+            else {
+                return 0;
+            }
+        }
+        else {
+            send_msg "WHOIS $nick";
+            sleep 3;
+        }
+    }
+}
 
 # Regex parsing of useful stuff
 my $match_ping = qr/^PING\s(.*)$/i;
@@ -110,6 +139,20 @@ my $match_irc_msg =
     /x;
 
 ## Implementation
+
+sub create_cmd_worker
+{
+    my $f = shift;
+    my $thr = threads->create($f, @_);
+    push (@workers, $thr);
+}
+
+sub get_history
+{
+    $history_lock->down();
+    return @history;
+    $history_lock->up();
+}
 
 sub register_plugin
 {
@@ -144,6 +187,26 @@ sub unload_plugins
         $plugin->unload();
     }
     %plugins = ();
+}
+
+sub stdin_listener
+{
+    while(<STDIN>) {
+        chomp $_;
+        if (/^\./) {
+            # We've recieved an admin command
+            create_cmd_worker(\&process_admin_cmd, $_);
+        }
+        elsif (/^<\s*(.*)/) {
+            # Act like we recieve it from the socket
+            say "~ $1";
+            $in_queue->enqueue("$1\r\n");
+        }
+        else {
+            # If it's not a command we just pipe it to the server
+            send_msg ($_);
+        }
+    }
 }
 
 sub read_sock
@@ -211,7 +274,6 @@ sub send_msg
     my $msg = join("", @_);
 
     if (length($msg) > 0 ) {
-        #write_sock($sock, $msg);
         write_sock($msg);
     }
     else {
@@ -359,7 +421,9 @@ sub process_irc_msg
         my $nick = $1;
 
         if (!exists($authed_nicks{$nick})) {
-            $authed_nicks{$nick} = 0;
+            $nick_lock->down();
+                $authed_nicks{$nick} = 0;
+            $nick_lock->up();
         }
     }
 }
@@ -385,7 +449,7 @@ sub process_privmsg
             my $cmd = $1;
             my $args = $2;
 
-            process_privmsg_cmd ($sender, $target, $cmd, $args);
+            create_cmd_worker (\&process_cmd, $sender, $target, $cmd, $args);
         }
         else {
             for my $plugin (values %plugins)
@@ -396,7 +460,7 @@ sub process_privmsg
     }
 }
 
-sub process_privmsg_cmd
+sub process_cmd
 {
     my ($sender, $target, $cmd, $args) = @_;
 
@@ -417,23 +481,11 @@ sub process_privmsg_cmd
     }
 }
 
-sub get_history
-{
-    $history_lock->down();
-    return @history;
-    $history_lock->up();
-}
-
 sub process_admin_cmd
 {
     my ($input) = @_;
 
-    # If prefixed with a '!' we should just send the text raw to the server.
-    if ($input =~ /^!(.*)/) {
-        send_msg $1;
-    }
-    # Else it should look like a regular command.
-    elsif ($input =~ $match_cmd) {
+    if ($input =~ $match_cmd) {
         my $cmd = $1;
         my $args = $2;
 
@@ -456,18 +508,11 @@ sub process_admin_cmd
             $args =~ /^(\S+)/;
             my $nick = $1;
 
-            if (exists($authed_nicks{$nick})) {
-                if ($authed_nicks{$nick}) {
-                    say "Very authed indeed!";
-                }
-                else {
-                    say "Not authed no.";
-                }
+            if (is_authed ($nick) ) {
+                say "Very authed indeed!";
             }
             else {
-                send_msg "WHOIS $1";
-                #say "Try again in a while.";
-                #$in_queue->enqueue($input);
+                say "Nope, no auth there!";
             }
         }
         elsif ($has_connected) {
@@ -481,9 +526,6 @@ sub process_admin_cmd
 
 sub start
 {
-    #my ($in_queue) = @_;
-    ($in_queue) = @_;
-
     # Connect to the IRC server.
     $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
                                  PeerPort => $Bot_Config::port,
@@ -497,43 +539,35 @@ sub start
     send_msg "NICK $Bot_Config::nick";
     send_msg "USER $Bot_Config::username 0 * :$Bot_Config::realname";
 
+    # Worker thread for listening and parsing stdin cmds
+    my $stdin_listener = threads->create(\&stdin_listener);
+
     # Worker thread so we can handle both socket input
     # and stdin input through queues.
-    my $listener = threads->create(\&sock_listener, $in_queue, $sock);
+    my $sock_listener = threads->create(\&sock_listener, $in_queue, $sock);
 
     # Worker who outputs everything from the $out_queue to the socket
     # so we can write to socket from other threads
-    my $writer = threads->create(\&socket_writer, $sock);
+    my $sock_writer = threads->create(\&socket_writer, $sock);
 
     while (my $input = $in_queue->dequeue()) {
         chomp $input;
 
-        if ($input =~ /^[!.]/) {
-            process_admin_cmd ($input);
-            #my $thr = threads->create( \&process_in_cmd, $input );
-            #push (@workers, $thr);
+        if ($input =~ /^\\(.*)/) {
+            $input = $1;
+        }
+        recieve_msg $input;
+
+        # We must respond to PINGs to avoid being disconnected.
+        if ($input =~ $match_ping) {
+            send_msg "PONG $1";
+        }
+
+        if ($has_connected) {
+            parse_recieved $input;
         }
         else {
-            if ($input =~ /^\\(.*)/) {
-                $input = $1;
-            }
-            recieve_msg $input;
-
-            # We must respond to PINGs to avoid being disconnected.
-            if ($input =~ $match_ping) {
-                send_msg "PONG $1";
-            }
-
-            if ($has_connected) {
-                parse_recieved $input;
-                #my $thr = threads->create( \&parse_recieved, $input );
-                #push (@workers, $thr);
-            }
-            else {
-                parse_pre_login_recieved $input;
-                #my $thr = threads->create( \&parse_pre_login_recieved, $input );
-                #push (@workers, $thr);
-            }
+            parse_pre_login_recieved $input;
         }
     }
 }
