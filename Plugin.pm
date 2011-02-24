@@ -7,10 +7,13 @@ use MooseX::Declare;
 role Plugin
 {
     requires qw(
-        module_cmds
+        cmds
+        undocumented_cmds
+        admin_cmds
         process_cmd
-        process_irc_msg
+        process_admin_cmd
         process_privmsg
+        process_irc_msg
         process_bare_msg
         cmd_help
         load
@@ -23,8 +26,9 @@ class DefaultPlugin with Plugin
     method unload { }
 
     # return list of commands the plugin listens to
-    method module_cmds { return (); }
-    method module_undocumented_cmds { return (); }
+    method cmds { return (); }
+    method undocumented_cmds { return (); }
+    method admin_cmds { return (); }
 
     # sender, target, cmd, args
     method process_cmd { }

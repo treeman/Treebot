@@ -20,7 +20,10 @@ my $sock_lock = Thread::Semaphore->new(2);
 my $has_connected :shared = 0;
 
 my %plugins;
+
 my @cmd_list;
+my @undoc_cmd_list;
+my @admin_cmd_list;
 
 my %authed_nicks :shared;
 my $nick_lock = Thread::Semaphore->new(1);
@@ -131,18 +134,36 @@ sub load_plugins
     for my $plugin (values %plugins)
     {
         $plugin->load();
-        my @cmds = $plugin->module_cmds();
+        my @cmds = $plugin->cmds();
         for my $cmd (@cmds) {
             if ($cmd) {
-                push(@cmd_list, $cmd);
+                push (@cmd_list, $cmd);
+            }
+        }
+
+        my @undoc_cmds = $plugin->undocumented_cmds();
+        for my $cmd (@undoc_cmds) {
+            if ($cmd) {
+                push (@undoc_cmd_list, $cmd);
+            }
+        }
+
+        my @admin_cmds = $plugin->admin_cmds();
+        for my $cmd (@admin_cmds) {
+            if ($cmd) {
+                push (@admin_cmd_list, $cmd);
             }
         }
     }
 
-    push(@cmd_list, "cmds");
-    push(@cmd_list, "help");
+    push (@cmd_list, "cmds");
+    push (@cmd_list, "help");
 
-    @cmd_list = sort(@cmd_list);
+    push (@admin_cmd_list, "admin_cmds");
+
+    @cmd_list = sort (@cmd_list);
+    @undoc_cmd_list = sort (@undoc_cmd_list);
+    @admin_cmd_list = sort (@admin_cmd_list);
 }
 
 sub unload_plugins
@@ -461,6 +482,10 @@ sub process_cmd
         my $msg = "Documented commands: " . join(", ", @cmd_list);
         Irc::send_privmsg ($target, $msg);
     }
+    elsif ($cmd eq "undocumented_cmds") {
+        my $msg = "Undocumented commands: " . join(", ", @undoc_cmd_list);
+        Irc::send_privmsg ($target, $msg);
+    }
     else {
         for my $plugin (values %plugins)
         {
@@ -502,7 +527,11 @@ sub process_admin_cmd
             send_privmsg $target, "$args is not admin";
         }
     }
-    elsif ($has_connected) {
+    elsif ($cmd =~ /^admin_cmds$/) {
+        my $msg = "Admin commands: " . join(", ", @admin_cmd_list);
+        Irc::send_privmsg ($target, $msg);
+    }
+    else {
         for my $plugin (values %plugins)
         {
             $plugin->process_admin_cmd ($sender, $target, $cmd, $args);
@@ -547,8 +576,16 @@ sub start
             my $cmd = $1;
             my $args = $2;
 
-            # Empty sender and target means the command is internal
-            create_cmd_worker(\&process_cmd, "", "", $cmd, $args);
+            # Prevent segfaulting if we're trying to dispatch a command
+            # before we've connected and loaded our plugins
+            if ($has_connected) {
+                # Empty sender and target means the command is internal
+                create_cmd_worker(\&process_cmd, "", "", $cmd, $args);
+            }
+            # For now only allow a quit command before connection
+            elsif ($cmd eq "quit") {
+                main::quit();
+            }
             next;
         }
         recieve_msg $input;

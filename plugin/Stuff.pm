@@ -16,13 +16,23 @@ class Stuff extends DefaultPlugin
         $self->started(time);
     }
 
-    override module_cmds
+    override cmds
     {
         return qw(id
                   botsnack
                   status
                   uptime
                   hello);
+    }
+
+    override undocumented_cmds
+    {
+        return qw(pew);
+    }
+
+    override admin_cmds
+    {
+        return qw(dance);
     }
 
     override process_cmd ($sender, $target, $cmd, $arg)

@@ -12,7 +12,7 @@ class Git extends DefaultPlugin
     {
         $self->head(`git rev-parse HEAD`);
     }
-    override module_cmds
+    override cmds
     {
         return qw(git);
     }
