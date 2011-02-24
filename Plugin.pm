@@ -24,9 +24,11 @@ class DefaultPlugin with Plugin
 
     # return list of commands the plugin listens to
     method module_cmds { return (); }
+    method module_undocumented_cmds { return (); }
 
     # sender, target, cmd, args
     method process_cmd { }
+    method process_admin_cmd { }
 
     # sender, target, msg
     method process_privmsg { }

@@ -1,5 +1,9 @@
 ﻿# Bugs
 *^C hangs on stdin getline, quits after enter
+*Plugins are not threaded properly, changes to variables won't work
+    Solution is to threat the plugin objects themselves as immutable
+    and to store everything mutable somewhere else? On file or in a thread-safe
+    object?
 
 # Implemented
 *id
@@ -15,13 +19,13 @@
 *status
     I'm a teapot
 *admin
+    checking for admin commands
     force recheck when nick quits and joins
     follows nick change, check admin auth nick - not the normal one
     admin authed nicks set in config
 
 # Ideas/Commands
 *admin
-    add checking for admin commands
     auto-op admins if we can
 *plugins
     commands for loading/unloading/reloading plugins!

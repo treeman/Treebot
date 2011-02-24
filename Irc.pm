@@ -22,17 +22,11 @@ my $has_connected :shared = 0;
 my %plugins;
 my @cmd_list;
 
-my @history :shared;
-my $history_lock = Thread::Semaphore->new(1);
-
 my %authed_nicks :shared;
 my $nick_lock = Thread::Semaphore->new(1);
 
 my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
-
-# Pairs of code to match against and the function reference to call when it happens
-my @code_hooks;
 
 # Worker threads for dispatching commands
 my @workers;
@@ -65,11 +59,6 @@ sub send_msg;
 # Send a PRIVMSG to the server
 sub send_privmsg;
 
-# Add a callback hook (code to match, function to call)
-sub hook_at_code;
-# Call, and remove, from code_hooks if the code matches (code, params-to-func)
-sub call_code_hook;
-
 # When we've recieved a message
 sub recieve_msg;
 # Parse the recieved message
@@ -94,6 +83,7 @@ sub quit;
 
 # Cannot run in the same thread as a listener, will sleep
 sub is_authed;
+sub is_admin;
 
 # Regex parsing of useful stuff
 my $match_ping = qr/^PING\s(.*)$/i;
@@ -127,13 +117,6 @@ sub create_cmd_worker
     my $f = shift;
     my $thr = threads->create($f, @_);
     push (@workers, $thr);
-}
-
-sub get_history
-{
-    $history_lock->down();
-    return @history;
-    $history_lock->up();
 }
 
 sub register_plugin
@@ -176,8 +159,12 @@ sub stdin_listener
     while(<STDIN>) {
         chomp $_;
         if (/^\./) {
-            # We've recieved an admin command
-            create_cmd_worker(\&process_admin_cmd, $_);
+            # We've recieved a command, it will be parsed in the $in_queue.
+            #
+            # If we create a new worker thread here, our plugins will have
+            # a different thread state, so the main function will have to
+            # dispatch them.
+            $in_queue->enqueue($_);
         }
         elsif (/^<\s*(.*)/) {
             # Act like we recieve it from the socket
@@ -185,7 +172,7 @@ sub stdin_listener
             $in_queue->enqueue("$1\r\n");
         }
         else {
-            # If it's not a command we just pipe it to the server
+            # If it's not something special we just pipe it to the server
             send_msg ($_);
         }
     }
@@ -208,7 +195,7 @@ sub read_sock
 
 sub sock_listener
 {
-    my ($in_queue, $sock) = @_;
+    my ($sock) = @_;
     while(my $input = read_sock($sock)) {
         # Prevent the server from being confused with our own input commands
         if ($input =~ /^\Q$Bot_Config::cmd_prefix\E/) {
@@ -276,39 +263,9 @@ sub send_privmsg
     }
 }
 
-sub hook_at_code
-{
-    my ($code, $callback) = @_;
-
-    push (@code_hooks, $code);
-    push (@code_hooks, $callback);
-}
-
-sub call_code_hook
-{
-    my $code = shift @_;
-
-    for (my $i = 0; $i < length (@code_hooks); $i += 2) {
-        if ($code_hooks[$i] == $code) {
-            my $id = $code_hooks[$i];
-            my $f = $code_hooks[$i + 1];
-
-            $f->();
-
-            @code_hooks = splice( @code_hooks, $i, 2 );
-        }
-    }
-}
-
 sub recieve_msg
 {
     Log::recieved @_;
-
-    my ($msg) = join("", @_);
-    $history_lock->down();
-    @history = ($msg, @history);
-    #$#history = 100; # Max history of 100, shouldn't need more
-    $history_lock->up();
 }
 
 sub parse_recieved
@@ -328,10 +285,10 @@ sub parse_recieved
         else {
             $prefix = "$1";
         }
-        my $cmd = $2;
+        my $code = $2;
         my $param = $3;
 
-        process_irc_msg($prefix, $cmd, $param);
+        process_irc_msg($prefix, $code, $param);
     }
     else {
         Log::error("Peculiar, we couldn't capture the message: ", $msg);
@@ -342,34 +299,49 @@ sub parse_pre_login_recieved
 {
     my ($input) = @_;
 
-    # Check the numerical responses from the server.
-    if ($input =~ /004/) {
-        # We managed to login, yay!
-        $has_connected = 1;
-
-        # Actually load all plugins.
-        load_plugins();
-
-        # We are now logged in, so join.
-        for my $channel (@Bot_Config::channels) {
-            send_msg "JOIN $channel";
+    if ($input =~ $match_irc_msg) {
+        my $prefix;
+        if (!defined ($1)) {
+            $prefix = "";
         }
+        else {
+            $prefix = "$1";
+        }
+        my $code = $2;
+        my $param = $3;
 
-        # Register our nick if we're on quakenet
-        if ($Bot_Config::server =~ /quakenet/) {
-            open my $fh, '<', "Q-pass";
-            my $pass = <$fh>;
-            chomp $pass;
-            send_privmsg
-                "Q\@CServe.quakenet.org",
-                "AUTH $Bot_Config::nick $pass";
+        # Check the numerical responses from the server.
+        if ($code =~ /004/) {
+            # We managed to login, yay!
+            $has_connected = 1;
+
+            # Actually load all plugins.
+            load_plugins();
+
+            # We are now logged in, so join.
+            for my $channel (@Bot_Config::channels) {
+                send_msg "JOIN $channel";
+            }
+
+            # Register our nick if we're on quakenet
+            if ($Bot_Config::server =~ /quakenet/) {
+                open my $fh, '<', "Q-pass";
+                my $pass = <$fh>;
+                chomp $pass;
+                send_privmsg
+                    "Q\@CServe.quakenet.org",
+                    "AUTH $Bot_Config::nick $pass";
+            }
+        }
+        elsif ($code =~ /433/) {
+            # Instead of death try to force use of some random nickname.
+            my $rand_int = int(rand(100));
+            send_msg "NICK $Bot_Config::nick$rand_int";
         }
     }
-    #elsif ($input =~ /433/) {
-        # Instead of death try to force use of some random nickname.
-    #    my $rand_int = int(rand(100));
-    #    send_msg "NICK $Bot_Config::nick$rand_int";
-    #}
+    else {
+        Log::error("Peculiar, we couldn't capture the message: ", $input);
+    }
 }
 
 sub process_irc_msg
@@ -417,10 +389,16 @@ sub process_irc_msg
         $prefix =~ /^(.+?)!~/;
         my $nick = $1;
 
+        if ($nick eq $Bot_Config::nick) { return };
+
         # If we have an entry of this fellaw, undef it so we must check it again
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = undef;
         }
+
+        # Worker thread so we don't hang up when waiting for end of whois response
+        my $thr = threads->create (\&is_admin, $nick);
+        $thr->detach();
     }
     elsif ($irc_cmd =~ /NICK/) {
         $prefix =~ /^(.+?)!~/;
@@ -429,7 +407,7 @@ sub process_irc_msg
         $param =~ /^:(.*)/;
         my $new_nick = $1;
 
-        say "swapping nicks: $old_nick $new_nick";
+        if ($old_nick eq $Bot_Config::nick) { return };
 
         if (exists($authed_nicks{$old_nick})) {
             $authed_nicks{$new_nick} = $authed_nicks{$old_nick};
@@ -489,58 +467,45 @@ sub process_cmd
             $plugin->process_cmd ($sender, $target, $cmd, $args);
         }
     }
+
+    if (is_admin($sender)) {
+        process_admin_cmd ($sender, $target, $cmd, $args);
+    }
 }
 
 sub process_admin_cmd
 {
-    my ($input) = @_;
+    my ($sender, $target, $cmd, $args) = @_;
 
-    if ($input =~ $match_cmd) {
-        my $cmd = $1;
-        my $args = $2;
-
-        Log::cmd" $cmd $args";
-
-        if ($cmd eq "quit") {
-            main::quit();
+    if ($cmd eq "quit") {
+        main::quit();
+    }
+    elsif ($cmd eq "msg") {
+        $args =~ /^(\S+)\s+(\S+)$/;
+        my $target = $1;
+        my $msg = $2;
+        send_privmsg $target, $msg;
+    }
+    elsif ($cmd eq "is_authed") {
+        if (is_authed ($args) ) {
+            send_privmsg $target, "$args is auth";
         }
-        elsif ($cmd eq "msg" && $args =~ /(\S+)\s+(.*)/) {
-            my $target = $1;
-            my $msg = $2;
-
-            send_privmsg $target, $msg;
+        else {
+            send_privmsg $target, "$args is not auth";
         }
-        elsif ($cmd eq "history") {
-            $, = "\n";
-            say @history;
+    }
+    elsif ($cmd eq "is_admin") {
+        if (is_admin ($args) ) {
+            send_privmsg $target, "$args is admin!";
         }
-        elsif ($cmd eq "check") {
-            $args =~ /^(\S+)/;
-            my $nick = $1;
-
-            if (is_authed ($nick) ) {
-                say "Very authed indeed!";
-            }
-            else {
-                say "Nope, no auth there!";
-            }
+        else {
+            send_privmsg $target, "$args is not admin";
         }
-        elsif ($cmd eq "admin") {
-            $args =~ /^(\S+)/;
-            my $nick = $1;
-
-            if (is_admin ($nick) ) {
-                say "Very admin indeed!";
-            }
-            else {
-                say "Nope, no admin there!";
-            }
-        }
-        elsif ($has_connected) {
-            for my $plugin (values %plugins)
-            {
-                $plugin->process_cmd ("", "", $cmd, $args);
-            }
+    }
+    elsif ($has_connected) {
+        for my $plugin (values %plugins)
+        {
+            $plugin->process_admin_cmd ($sender, $target, $cmd, $args);
         }
     }
 }
@@ -565,7 +530,7 @@ sub start
 
     # Worker thread so we can handle both socket input
     # and stdin input through queues.
-    my $sock_listener = threads->create(\&sock_listener, $in_queue, $sock);
+    my $sock_listener = threads->create(\&sock_listener, $sock);
 
     # Worker who outputs everything from the $out_queue to the socket
     # so we can write to socket from other threads
@@ -576,6 +541,15 @@ sub start
 
         if ($input =~ /^\\(.*)/) {
             $input = $1;
+        }
+        elsif ($input =~ $match_cmd) {
+            # We've recieved an internal command
+            my $cmd = $1;
+            my $args = $2;
+
+            # Empty sender and target means the command is internal
+            create_cmd_worker(\&process_cmd, "", "", $cmd, $args);
+            next;
         }
         recieve_msg $input;
 
@@ -614,6 +588,7 @@ sub is_authed
         }
         elsif (!$whois_sent) {
             send_msg "WHOIS $nick";
+            $whois_sent = 1;
             sleep 1;
         }
         else {
@@ -625,6 +600,9 @@ sub is_authed
 sub is_admin
 {
     my ($nick) = @_;
+
+    # If sent from stdin
+    if ($nick eq "") { return 1; }
 
     if (is_authed ($nick)) {
         my $authed_nick = $authed_nicks{$nick};

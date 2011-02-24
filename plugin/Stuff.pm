@@ -57,6 +57,13 @@ class Stuff extends DefaultPlugin
         }
     }
 
+    override process_admin_cmd ($sender, $target, $cmd, $arg)
+    {
+        if ($cmd eq "dance") {
+            Irc::send_privmsg ($target, "Imma dancin!");
+        }
+    }
+
     override process_privmsg ($sender, $target, $msg)
     {
         if ($msg =~ /
