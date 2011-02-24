@@ -14,6 +14,8 @@
 *cmds
     add synnonym commands
     list all commands
+*undocumented_cmds
+*admin_cmds
 *uptime
 *hello
 *status
@@ -32,7 +34,6 @@
 *git
     lines changed the last day/week/month (extract from git log -p <filename>)
     pull master origin, or others
-*undocumentedcmds
 *insult/compliment + monkey island retort
 *slap
 *help

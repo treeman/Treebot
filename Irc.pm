@@ -160,6 +160,9 @@ sub load_plugins
     push (@cmd_list, "help");
 
     push (@admin_cmd_list, "admin_cmds");
+    push (@admin_cmd_list, "is_authed");
+    push (@admin_cmd_list, "is_admin");
+    push (@admin_cmd_list, "msg");
 
     @cmd_list = sort (@cmd_list);
     @undoc_cmd_list = sort (@undoc_cmd_list);
@@ -576,15 +579,15 @@ sub start
             my $cmd = $1;
             my $args = $2;
 
+            # For now only allow a quit command before connection
+            if ($cmd eq "quit") {
+                main::quit();
+            }
             # Prevent segfaulting if we're trying to dispatch a command
             # before we've connected and loaded our plugins
-            if ($has_connected) {
+            elsif ($has_connected) {
                 # Empty sender and target means the command is internal
                 create_cmd_worker(\&process_cmd, "", "", $cmd, $args);
-            }
-            # For now only allow a quit command before connection
-            elsif ($cmd eq "quit") {
-                main::quit();
             }
             next;
         }
