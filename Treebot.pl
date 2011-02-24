@@ -11,6 +11,8 @@ use Log;
 use Bot_Config;
 use Irc;
 
+push (@INC, "plugin/");
+
 # try to load all files in the plugins folder
 my $dirname = "plugin";
 
