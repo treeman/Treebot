@@ -400,7 +400,7 @@ sub process_irc_msg
             $nick_lock->up();
         }
     }
-    elsif ($irc_cmd =~ /QUIT/) {
+    elsif ($irc_cmd =~ /QUIT|PART/) {
         $prefix =~ /^(.+?)!~/;
         my $nick = $1;
 
@@ -421,8 +421,8 @@ sub process_irc_msg
         }
 
         # Worker thread so we don't hang up when waiting for end of whois response
-        my $thr = threads->create (\&is_admin, $nick);
-        $thr->detach();
+        #my $thr = threads->create (\&is_admin, $nick);
+        #$thr->detach();
     }
     elsif ($irc_cmd =~ /NICK/) {
         $prefix =~ /^(.+?)!~/;
@@ -488,6 +488,10 @@ sub process_cmd
     elsif ($cmd eq "undocumented_cmds") {
         my $msg = "Undocumented commands: " . join(", ", @undoc_cmd_list);
         Irc::send_privmsg ($target, $msg);
+    }
+    elsif ($cmd eq "recheck") {
+        $authed_nicks{$sender} = undef;
+        is_authed $sender;
     }
     else {
         for my $plugin (values %plugins)
