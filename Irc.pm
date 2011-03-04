@@ -17,10 +17,17 @@ use Bot_Config;
 # Create a worker thread and store it in workers
 sub create_cmd_worker;
 
-# "Automatic" plugin handling
-sub register_plugin;
+# Plugin handling
+sub resolve_plugin_name;
+sub list_loaded_plugins;
+sub list_available_plugins;
+
 sub load_plugins;
 sub unload_plugins;
+
+sub load_plugin;
+sub unload_plugin;
+sub reload_plugin;
 
 # Thread for listening to stdin and dispatching cmds and stuff
 sub stdin_listener;
@@ -88,9 +95,9 @@ my %real_plugins;
 $plugins = share(%real_plugins);
 my $plugin_lock = Thread::Semaphore->new();
 
-my @cmd_list;
-my @undoc_cmd_list;
-my @admin_cmd_list;
+my @cmd_list :shared;
+my @undoc_cmd_list :shared;
+my @admin_cmd_list :shared;
 
 my %authed_nicks :shared;
 my $nick_lock = Thread::Semaphore->new();
@@ -136,43 +143,65 @@ sub create_cmd_worker
     push (@workers, $thr);
 }
 
-sub register_plugin
+sub resolve_plugin_name
 {
-    my ($name, $plugin) = @_;
+    my ($name) = @_;
+    my $dir = $Bot_Config::plugin_folder;
+    my $file = $name;
 
-    $plugin_lock->down();
-    $plugins->{$name} = share($plugin);
-    $plugin_lock->up();
+    if ($file !~ /^.*\.pm$/) {
+        $file = $file . ".pm";
+    }
+    if ($file !~ /^\E$dir\Q/) {
+        $file = $dir . $file;
+    }
+
+    if (-e $file) {
+        return $file;
+    }
+    else {
+        return "";
+    }
+}
+sub list_loaded_plugins
+{
+    my @list;
+
+    for my $path (keys %{$plugins}) {
+        if ($path =~ /\/([^\/]*)\.pm$/) {
+            push (@list, $1);
+        }
+    }
+    return sort @list;
+}
+sub list_available_plugins
+{
+    my @list;
+
+    my $dir = $Bot_Config::plugin_folder;
+    opendir(DIR, $dir) or die "can't open dir $dir: $!";
+    while (defined (my $file = readdir(DIR))) {
+        if ($file =~ /(.*)\.pm/) {
+            push (@list, $1);
+        }
+    }
+    closedir(DIR);
+
+    return sort @list;
 }
 
 sub load_plugins
 {
-    $plugin_lock->down();
-    for my $plugin (values %{$plugins})
-    {
-        $plugin->load();
-        my @cmds = $plugin->cmds();
-        for my $cmd (@cmds) {
-            if ($cmd) {
-                push (@cmd_list, $cmd);
-            }
-        }
+    # try to load all files in the plugins folder
+    push (@INC, $Bot_Config::plugin_folder);
 
-        my @undoc_cmds = $plugin->undocumented_cmds();
-        for my $cmd (@undoc_cmds) {
-            if ($cmd) {
-                push (@undoc_cmd_list, $cmd);
-            }
-        }
+    my $dirname = $Bot_Config::plugin_folder;
 
-        my @admin_cmds = $plugin->admin_cmds();
-        for my $cmd (@admin_cmds) {
-            if ($cmd) {
-                push (@admin_cmd_list, $cmd);
-            }
-        }
+    opendir(DIR, $dirname) or die "can't open dir $dirname: $!";
+    while (defined (my $file = readdir(DIR))) {
+        load_plugin_file ("$dirname$file");
     }
-    $plugin_lock->up();
+    closedir(DIR);
 
     push (@cmd_list, "cmds");
     push (@cmd_list, "help");
@@ -193,6 +222,119 @@ sub unload_plugins
     }
     %{$plugins} = ();
     $plugin_lock->up();
+}
+
+sub load_plugin
+{
+    my ($name) = @_;
+    say "We shall load $name!";
+    my $file = resolve_plugin_name ($name);
+
+    if ($file) {
+        load_plugin_file ($file);
+    }
+    else {
+        say "$name isn't a plugin.";
+    }
+}
+sub load_plugin_file
+{
+    my ($file) = @_;
+
+    if ($file =~ /\/([^\/]*)\.pm$/) {
+        my $name = $1;
+        if (!defined ($plugins->{$file})) {
+            say "Requering $file";
+            require $file;
+
+            if ($name->can('new')) {
+                my $plugin = $name->new();
+                if ($plugin->DOES('Plugin')) {
+                    say "Loading $file";
+
+                    $plugin_lock->down();
+
+                    $plugins->{$file} = share($plugin);
+                    $plugin->load();
+
+                    my @cmds = $plugin->cmds();
+                    for my $cmd (@cmds) {
+                        if ($cmd) {
+                            push (@cmd_list, $cmd);
+                        }
+                    }
+
+                    my @undoc_cmds = $plugin->undocumented_cmds();
+                    for my $cmd (@undoc_cmds) {
+                        if ($cmd) {
+                            push (@undoc_cmd_list, $cmd);
+                        }
+                    }
+
+                    my @admin_cmds = $plugin->admin_cmds();
+                    for my $cmd (@admin_cmds) {
+                        if ($cmd) {
+                            push (@admin_cmd_list, $cmd);
+                        }
+                    }
+                    $plugin_lock->up();
+                }
+                else {
+                    Log::error("$file doesn't do the Plugin role!");
+                }
+            }
+            else {
+                say "$name doesn't do new!";
+            }
+        }
+        else {
+            say "$file is already loaded.";
+        }
+    }
+}
+sub unload_plugin
+{
+    my ($name) = @_;
+    my $file = resolve_plugin_name ($name);
+
+    if (defined ($plugins->{$file})) {
+        say "Unloading $file";
+
+        my $plugin = $plugins->{$file};
+
+        my @cmds = $plugin->cmds();
+        #$plugin_lock->down();
+        @cmd_list = remove_matches(\@cmd_list, \@cmds);
+        say join (", ", @cmd_list);
+        #$plugin_lock->up();
+
+        $plugin->unload();
+        delete $plugins->{$file};
+    }
+}
+
+sub remove_matches
+{
+    my ($origin, $remove) = @_;
+    say join (", ", @{$origin});
+    say join (", ", @{$remove});
+
+    my %seen;
+    for (@{$origin}) {
+        $seen{$_} = 1;
+    }
+
+    for (@{$remove}) {
+        delete $seen{$_};
+    }
+    say join (", ", keys %seen);
+
+    return keys %seen;
+}
+
+sub reload_plugin
+{
+
 }
 
 sub stdin_listener
@@ -484,9 +626,9 @@ sub process_privmsg
 
         if ($msg =~ $match_cmd) {
             my $cmd = $1;
-            my $args = $2;
+            my $arg = $2;
 
-            create_cmd_worker (\&process_cmd, $sender, $target, $cmd, $args);
+            create_cmd_worker (\&process_cmd, $sender, $target, $cmd, $arg);
         }
         else {
             $plugin_lock->down();
@@ -501,10 +643,10 @@ sub process_privmsg
 
 sub process_cmd
 {
-    my ($sender, $target, $cmd, $args) = @_;
+    my ($sender, $target, $cmd, $arg) = @_;
 
     if ($cmd eq "help") {
-        if ($args =~ /^\s*$/) {
+        if ($arg =~ /^\s*$/) {
             Irc::send_privmsg ($target, $Bot_Config::help_msg);
         }
         else {
@@ -512,7 +654,7 @@ sub process_cmd
             $plugin_lock->down();
             for my $plugin (values %{$plugins})
             {
-                my $help = $plugin->cmd_help ($args);
+                my $help = $plugin->cmd_help ($arg);
                 if (defined ($help) && length ($help)) {
                     Irc::send_privmsg ($target, $help);
                     $help_sent = 1;
@@ -529,7 +671,7 @@ sub process_cmd
         my $msg = "Documented commands: " . join(", ", @cmd_list);
         Irc::send_privmsg ($target, $msg);
     }
-    elsif ($cmd eq "undocumented_cmds") {
+    elsif ($cmd =~ /undocumented_?cmds/) {
         my $msg = "Undocumented commands: " . join(", ", @undoc_cmd_list);
         Irc::send_privmsg ($target, $msg);
     }
@@ -541,32 +683,48 @@ sub process_cmd
         $plugin_lock->down();
         for my $plugin (values %{$plugins})
         {
-            $plugin->process_cmd ($sender, $target, $cmd, $args);
+            $plugin->process_cmd ($sender, $target, $cmd, $arg);
         }
         $plugin_lock->up();
     }
 
     if (is_admin($sender)) {
-        process_admin_cmd ($sender, $target, $cmd, $args);
+        process_admin_cmd ($sender, $target, $cmd, $arg);
     }
 }
 
 sub process_admin_cmd
 {
-    my ($sender, $target, $cmd, $args) = @_;
+    my ($sender, $target, $cmd, $arg) = @_;
 
     if ($cmd eq "quit") {
-        main::quit ($args);
+        main::quit ($arg);
     }
-    elsif ($cmd =~ /^admin_cmds$/) {
+    elsif ($cmd =~ /^admin_?cmds$/) {
         my $msg = "Admin commands: " . join(", ", @admin_cmd_list);
-        Irc::send_privmsg ($target, $msg);
+        send_privmsg ($target, $msg);
+    }
+    elsif ($cmd eq "load") {
+        load_plugin ($arg);
+    }
+    elsif ($cmd eq "unload") {
+        unload_plugin ($arg);
+    }
+    elsif ($cmd eq "loaded") {
+        my @plugins = list_loaded_plugins;
+        my $list = join (", ", @plugins);
+        send_privmsg $target, $list;
+    }
+    elsif ($cmd eq "available") {
+        my @plugins = list_available_plugins;
+        my $list = join (", ", @plugins);
+        send_privmsg $target, $list;
     }
     else {
         $plugin_lock->down();
         for my $plugin (values %{$plugins})
         {
-            $plugin->process_admin_cmd ($sender, $target, $cmd, $args);
+            $plugin->process_admin_cmd ($sender, $target, $cmd, $arg);
         }
         $plugin_lock->up();
     }
@@ -578,11 +736,21 @@ sub start
     my ($test_mode) = @_;
 
     if (!$test_mode) {
-        # Connect to the IRC server.
-        $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
-                                    PeerPort => $Bot_Config::port,
-                                    Proto => 'tcp') or
-                                        die "Can't connect\n";
+        my $attempt = 0;
+        while (!$sock) {
+            # Connect to the IRC server.
+            $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
+                                        PeerPort => $Bot_Config::port,
+                                        Proto => 'tcp');
+            ++$attempt;
+            if (!$sock) {
+                say "Attempt $attempt failed..";
+            }
+
+            if ($attempt > 4) {
+                die "Couldn't connect, aborting.";
+            }
+        }
 
         # Now the socket is ready for usage.
         $sock_lock->up(2);
@@ -600,8 +768,6 @@ sub start
         my $sock_writer = threads->create(\&socket_writer, $sock);
     }
     else {
-        say "Starting test mode.";
-
         # Worker who outputs everything from the $out_queue to a log
         my $out_redirect = threads->create(\&out_redirect);
 
@@ -622,17 +788,17 @@ sub start
         elsif ($input =~ $match_cmd) {
             # We've recieved an internal command
             my $cmd = $1;
-            my $args = $2;
+            my $arg = $2;
 
             # For now only allow a quit command before connection
             if ($cmd eq "quit") {
-                main::quit ($args);
+                main::quit ($arg);
             }
             # Prevent segfaulting if we're trying to dispatch a command
             # before we've connected and loaded our plugins
             elsif ($has_connected) {
                 # Empty sender and target means the command is internal
-                create_cmd_worker(\&process_cmd, "", "", $cmd, $args);
+                create_cmd_worker(\&process_cmd, "", "", $cmd, $arg);
             }
             next;
         }

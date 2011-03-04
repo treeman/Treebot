@@ -16,6 +16,11 @@ class Stuff extends DefaultPlugin
         $self->started(time);
     }
 
+    override unload
+    {
+        say "Getting unloaded.";
+    }
+
     override cmds
     {
         return qw(id
