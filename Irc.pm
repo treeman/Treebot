@@ -57,6 +57,9 @@ sub socket_writer;
 # Lock down socket and write
 sub output_to_sock;
 
+# Logs everything from out_queue
+sub out_redirect;
+
 # Format and send a string to the server
 sub send_msg;
 # Send a PRIVMSG to the server
@@ -192,7 +195,6 @@ sub stdin_listener
         }
         elsif (/^<\s*(.*)/) {
             # Act like we recieve it from the socket
-            say "~ $1";
             $in_queue->enqueue("$1\r\n");
         }
         else {
@@ -259,6 +261,14 @@ sub output_to_sock
     }
     else {
         Log::error "Trying to write to sock but it's closed: ", $msg;
+    }
+}
+
+sub out_redirect
+{
+    while(my $msg = $out_queue->dequeue()) {
+        chomp $msg;
+        Log::sent($msg);
     }
 }
 
@@ -357,6 +367,7 @@ sub parse_pre_login_recieved
                     "AUTH $Bot_Config::nick $pass";
             }
         }
+        # Nickname in use
         elsif ($code =~ /433/) {
             # Instead of death try to force use of some random nickname.
             my $rand_int = int(rand(100));
@@ -548,29 +559,42 @@ sub process_admin_cmd
 
 sub start
 {
-    # Connect to the IRC server.
-    $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
-                                 PeerPort => $Bot_Config::port,
-                                 Proto => 'tcp') or
-                                    die "Can't connect\n";
+    # If we shall connect with the socket. Used for testing from stdin only
+    my ($test_mode) = @_;
 
-    # Now the socket is ready for usage.
-    $sock_lock->up(2);
+    if (!$test_mode) {
+        # Connect to the IRC server.
+        $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
+                                    PeerPort => $Bot_Config::port,
+                                    Proto => 'tcp') or
+                                        die "Can't connect\n";
 
-    # Log on to the server.
-    send_msg "NICK $Bot_Config::nick";
-    send_msg "USER $Bot_Config::username 0 * :$Bot_Config::realname";
+        # Now the socket is ready for usage.
+        $sock_lock->up(2);
+
+        # Log on to the server.
+        send_msg "NICK $Bot_Config::nick";
+        send_msg "USER $Bot_Config::username 0 * :$Bot_Config::realname";
+
+        # Worker thread so we can handle both socket input
+        # and stdin input through queues.
+        my $sock_listener = threads->create(\&sock_listener, $sock);
+
+        # Worker who outputs everything from the $out_queue to the socket
+        # so we can write to socket from other threads
+        my $sock_writer = threads->create(\&socket_writer, $sock);
+    }
+    else {
+        # Worker who outputs everything from the $out_queue to a log
+        my $out_redirect = threads->create(\&out_redirect);
+        # We have "connected"
+        $has_connected = 1;
+
+        say "Starting test mode.";
+    }
 
     # Worker thread for listening and parsing stdin cmds
     my $stdin_listener = threads->create(\&stdin_listener);
-
-    # Worker thread so we can handle both socket input
-    # and stdin input through queues.
-    my $sock_listener = threads->create(\&sock_listener, $sock);
-
-    # Worker who outputs everything from the $out_queue to the socket
-    # so we can write to socket from other threads
-    my $sock_writer = threads->create(\&socket_writer, $sock);
 
     while (my $input = $in_queue->dequeue()) {
         chomp $input;

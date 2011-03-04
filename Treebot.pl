@@ -10,6 +10,10 @@ use Thread::Queue;
 use Log;
 use Bot_Config;
 use Irc;
+use Getopt::Long;
+
+my $test_mode = 0;
+GetOptions('test|t' => \$test_mode);
 
 push (@INC, "plugin/");
 
@@ -48,5 +52,5 @@ sub quit
     exit;
 }
 
-Irc::start();
+Irc::start($test_mode);
 
