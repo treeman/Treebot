@@ -25,6 +25,10 @@
     force recheck when nick quits and joins
     follows nick change, check admin auth nick - not the normal one
     admin authed nicks set in config
+*monkey island insults and retorts
+*help
+    individual help messages
+*down? site
 
 # Ideas/Commands
 *admin
@@ -34,10 +38,8 @@
 *git
     lines changed the last day/week/month (extract from git log -p <filename>)
     pull master origin, or others
-*insult/compliment + monkey island retort
+*insult/compliment
 *slap
-*help
-    individual help messages
 *kolli
     check a package location
 *tell
@@ -68,7 +70,6 @@
 *wiki
 *episode
     tv show
-*down? http-link
 *gomtv live -> vlc link
     juse use the python script for that one
 

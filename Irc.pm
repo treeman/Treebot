@@ -1,5 +1,7 @@
 #!/usr/bin/perl -w
 
+package Irc;
+
 use Modern::Perl;
 use MooseX::Declare;
 use IO::Socket;
@@ -12,26 +14,29 @@ use Plugin;
 use Log;
 use Bot_Config;
 
-package Irc;
-
 my $sock;
 my $sock_lock = Thread::Semaphore->new(2);
 
 my $has_connected :shared = 0;
 
-my %plugins;
+# Shared reference to our plugins
+my $plugins :shared;
+my %real_plugins;
+$plugins = share(%real_plugins);
+my $plugin_lock = Thread::Semaphore->new();
 
 my @cmd_list;
 my @undoc_cmd_list;
 my @admin_cmd_list;
 
 my %authed_nicks :shared;
-my $nick_lock = Thread::Semaphore->new(1);
+my $nick_lock = Thread::Semaphore->new();
 
 my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
 
-# Worker threads for dispatching commands
+# Worker threads dispatched for commands
+# Probably should be removed when they're done?
 my @workers;
 
 # Create a worker thread and store it in workers
@@ -91,10 +96,10 @@ sub quit;
 sub irc_join;
 sub irc_part;
 sub irc_kick;
-sub irc_nick;
 
 # Cannot run in the same thread as a listener, will sleep
 sub is_authed;
+sub authed_as;
 sub is_admin;
 
 # Regex parsing of useful stuff
@@ -135,12 +140,15 @@ sub register_plugin
 {
     my ($name, $plugin) = @_;
 
-    $plugins{$name} = $plugin;
+    $plugin_lock->down();
+    $plugins->{$name} = share($plugin);
+    $plugin_lock->up();
 }
 
 sub load_plugins
 {
-    for my $plugin (values %plugins)
+    $plugin_lock->down();
+    for my $plugin (values %{$plugins})
     {
         $plugin->load();
         my @cmds = $plugin->cmds();
@@ -164,14 +172,12 @@ sub load_plugins
             }
         }
     }
+    $plugin_lock->up();
 
     push (@cmd_list, "cmds");
     push (@cmd_list, "help");
 
     push (@admin_cmd_list, "admin_cmds");
-    push (@admin_cmd_list, "is_authed");
-    push (@admin_cmd_list, "is_admin");
-    push (@admin_cmd_list, "msg");
 
     @cmd_list = sort (@cmd_list);
     @undoc_cmd_list = sort (@undoc_cmd_list);
@@ -180,11 +186,13 @@ sub load_plugins
 
 sub unload_plugins
 {
-    for my $plugin (values %plugins)
+    $plugin_lock->down();
+    for my $plugin (values %{$plugins})
     {
         $plugin->unload();
     }
-    %plugins = ();
+    %{$plugins} = ();
+    $plugin_lock->up();
 }
 
 sub stdin_listener
@@ -193,10 +201,6 @@ sub stdin_listener
         chomp $_;
         if (/^\./) {
             # We've recieved a command, it will be parsed in the $in_queue.
-            #
-            # If we create a new worker thread here, our plugins will have
-            # a different thread state, so the main function will have to
-            # dispatch them.
             $in_queue->enqueue($_);
         }
         elsif (/^<\s*(.*)/) {
@@ -312,10 +316,12 @@ sub parse_recieved
 {
     my ($msg) = @_;
 
-    for my $plugin (values %plugins)
+    $plugin_lock->down();
+    for my $plugin (values %{$plugins})
     {
         $plugin->process_bare_msg ($msg);
     }
+    $plugin_lock->up();
 
     if ($msg =~ $match_irc_msg) {
         my $prefix;
@@ -360,7 +366,7 @@ sub parse_pre_login_recieved
 
             # We are now logged in, so join.
             for my $channel (@Bot_Config::channels) {
-                send_msg "JOIN $channel";
+                irc_join $channel;
             }
 
             # Register our nick if we're on quakenet
@@ -369,7 +375,7 @@ sub parse_pre_login_recieved
                 my $pass = <$fh>;
                 chomp $pass;
                 send_privmsg
-                    "Q\@CServe.quakenet.org",
+                    'Q@CServe.quakenet.org',
                     "AUTH $Bot_Config::nick $pass";
             }
         }
@@ -389,10 +395,12 @@ sub process_irc_msg
 {
     my ($prefix, $irc_cmd, $param) = @_;
 
-    for my $plugin (values %plugins)
+    $plugin_lock->down();
+    for my $plugin (values %{$plugins})
     {
         $plugin->process_irc_msg ($prefix, $irc_cmd, $param);
     }
+    $plugin_lock->up();
 
     if ($irc_cmd =~ /PRIVMSG/) {
         process_privmsg ($prefix, $irc_cmd, $param);
@@ -481,10 +489,12 @@ sub process_privmsg
             create_cmd_worker (\&process_cmd, $sender, $target, $cmd, $args);
         }
         else {
-            for my $plugin (values %plugins)
+            $plugin_lock->down();
+            for my $plugin (values %{$plugins})
             {
                 $plugin->process_privmsg ($sender, $target, $msg);
             }
+            $plugin_lock->up();
         }
     }
 }
@@ -499,7 +509,8 @@ sub process_cmd
         }
         else {
             my $help_sent = 0;
-            for my $plugin (values %plugins)
+            $plugin_lock->down();
+            for my $plugin (values %{$plugins})
             {
                 my $help = $plugin->cmd_help ($args);
                 if (defined ($help) && length ($help)) {
@@ -507,6 +518,7 @@ sub process_cmd
                     $help_sent = 1;
                 }
             }
+            $plugin_lock->up();
 
             if (!$help_sent) {
                 Irc::send_privmsg ($target, $Bot_Config::help_missing);
@@ -526,10 +538,12 @@ sub process_cmd
         is_authed $sender;
     }
     else {
-        for my $plugin (values %plugins)
+        $plugin_lock->down();
+        for my $plugin (values %{$plugins})
         {
             $plugin->process_cmd ($sender, $target, $cmd, $args);
         }
+        $plugin_lock->up();
     }
 
     if (is_admin($sender)) {
@@ -542,39 +556,19 @@ sub process_admin_cmd
     my ($sender, $target, $cmd, $args) = @_;
 
     if ($cmd eq "quit") {
-        main::quit();
-    }
-    elsif ($cmd eq "msg") {
-        $args =~ /^(\S+)\s+(\S+)$/;
-        my $target = $1;
-        my $msg = $2;
-        send_privmsg $target, $msg;
-    }
-    elsif ($cmd eq "is_authed") {
-        if (is_authed ($args) ) {
-            send_privmsg $target, "$args is auth";
-        }
-        else {
-            send_privmsg $target, "$args is not auth";
-        }
-    }
-    elsif ($cmd eq "is_admin") {
-        if (is_admin ($args) ) {
-            send_privmsg $target, "$args is admin!";
-        }
-        else {
-            send_privmsg $target, "$args is not admin";
-        }
+        main::quit ($args);
     }
     elsif ($cmd =~ /^admin_cmds$/) {
         my $msg = "Admin commands: " . join(", ", @admin_cmd_list);
         Irc::send_privmsg ($target, $msg);
     }
     else {
-        for my $plugin (values %plugins)
+        $plugin_lock->down();
+        for my $plugin (values %{$plugins})
         {
             $plugin->process_admin_cmd ($sender, $target, $cmd, $args);
         }
+        $plugin_lock->up();
     }
 }
 
@@ -632,7 +626,7 @@ sub start
 
             # For now only allow a quit command before connection
             if ($cmd eq "quit") {
-                main::quit();
+                main::quit ($args);
             }
             # Prevent segfaulting if we're trying to dispatch a command
             # before we've connected and loaded our plugins
@@ -660,7 +654,13 @@ sub start
 
 sub quit
 {
-    send_msg "QUIT :$Bot_Config::quit_msg";
+    my ($msg) = @_;
+    if (defined ($msg)) {
+        send_msg "QUIT :$msg";
+    }
+    else {
+        send_msg "QUIT :$Bot_Config::quit_msg";
+    }
 }
 
 sub irc_join
@@ -671,20 +671,18 @@ sub irc_join
 }
 sub irc_part
 {
-    for (@_) {
-        send_msg "PART $_";
+    my ($channel, $reason) = @_;
+
+    if (defined ($reason)) {
+        send_msg "PART $channel :$reason";
+    }
+    else {
+        send_msg "PART $channel";
     }
 }
 sub irc_kick
 {
-    for (@_) {
-        send_msg "KICK $_";
-    }
-}
-sub irc_nick
-{
-    my ($nick) = @_;
-    send_msg "NICK $nick";
+
 }
 
 sub is_authed
@@ -710,6 +708,11 @@ sub is_authed
             sleep 1;
         }
     }
+}
+sub authed_as
+{
+    my ($nick) = @_;
+    return $authed_nicks{$nick};
 }
 
 sub is_admin

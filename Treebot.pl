@@ -47,7 +47,7 @@ sub quit
     }
 
     Irc::unload_plugins();
-    Irc::quit();
+    Irc::quit(@_);
 
     exit;
 }
