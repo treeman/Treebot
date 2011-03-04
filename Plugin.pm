@@ -45,7 +45,7 @@ class DefaultPlugin with Plugin
     method process_bare_msg { }
 
     # should return a help message for every command the module defines
-    method cmd_help { }
+    method cmd_help { return ""; }
 }
 
 1;

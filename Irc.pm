@@ -87,6 +87,12 @@ sub start;
 # Will get called when we quit, either by SIGINT or regular quit
 sub quit;
 
+# Irc helper functions
+sub irc_join;
+sub irc_part;
+sub irc_kick;
+sub irc_nick;
+
 # Cannot run in the same thread as a listener, will sleep
 sub is_authed;
 sub is_admin;
@@ -491,6 +497,21 @@ sub process_cmd
         if ($args =~ /^\s*$/) {
             Irc::send_privmsg ($target, $Bot_Config::help_msg);
         }
+        else {
+            my $help_sent = 0;
+            for my $plugin (values %plugins)
+            {
+                my $help = $plugin->cmd_help ($args);
+                if (defined ($help) && length ($help)) {
+                    Irc::send_privmsg ($target, $help);
+                    $help_sent = 1;
+                }
+            }
+
+            if (!$help_sent) {
+                Irc::send_privmsg ($target, $Bot_Config::help_missing);
+            }
+        }
     }
     elsif ($cmd =~ /^cmds|commands$/) {
         my $msg = "Documented commands: " . join(", ", @cmd_list);
@@ -585,12 +606,14 @@ sub start
         my $sock_writer = threads->create(\&socket_writer, $sock);
     }
     else {
+        say "Starting test mode.";
+
         # Worker who outputs everything from the $out_queue to a log
         my $out_redirect = threads->create(\&out_redirect);
+
         # We have "connected"
         $has_connected = 1;
-
-        say "Starting test mode.";
+        load_plugins();
     }
 
     # Worker thread for listening and parsing stdin cmds
@@ -637,7 +660,31 @@ sub start
 
 sub quit
 {
-    send_msg ("QUIT :$Bot_Config::quit_msg");
+    send_msg "QUIT :$Bot_Config::quit_msg";
+}
+
+sub irc_join
+{
+    for (@_) {
+        send_msg "JOIN $_";
+    }
+}
+sub irc_part
+{
+    for (@_) {
+        send_msg "PART $_";
+    }
+}
+sub irc_kick
+{
+    for (@_) {
+        send_msg "KICK $_";
+    }
+}
+sub irc_nick
+{
+    my ($nick) = @_;
+    send_msg "NICK $nick";
 }
 
 sub is_authed

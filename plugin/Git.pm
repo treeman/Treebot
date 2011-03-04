@@ -28,6 +28,13 @@ class Git extends DefaultPlugin
         }
     }
 
+    override cmd_help ($cmd)
+    {
+        if ($cmd eq "git commit") {
+            return "Show current commit.";
+        }
+    }
+
     has 'head', is => 'rw';
 }
 

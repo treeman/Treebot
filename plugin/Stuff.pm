@@ -48,8 +48,7 @@ class Stuff extends DefaultPlugin
             Irc::send_privmsg ($target, "Status: 418 I'm a teapot");
         }
         elsif ($cmd eq "uptime") {
-            my $curr = time;
-            my $passed = $curr - $self->started();
+            my $passed = time() - $self->started();
 
             my @parts = gmtime($passed);
             my ($d, $h, $m, $s) = @parts[7, 2, 1, 0];
