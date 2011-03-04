@@ -27,7 +27,8 @@ class Stuff extends DefaultPlugin
 
     override undocumented_cmds
     {
-        return qw(pew);
+        return qw(pew
+                  src);
     }
 
     override admin_cmds
@@ -63,6 +64,9 @@ class Stuff extends DefaultPlugin
             else {
                 Irc::send_privmsg ($target, "pew..");
             }
+        }
+        elsif ($cmd =~ /^src|source$/) {
+            Irc::send_privmsg ($target, "http://github.com/treeman/Treebot");
         }
     }
 

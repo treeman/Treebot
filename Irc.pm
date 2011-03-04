@@ -14,31 +14,6 @@ use Plugin;
 use Log;
 use Bot_Config;
 
-my $sock;
-my $sock_lock = Thread::Semaphore->new(2);
-
-my $has_connected :shared = 0;
-
-# Shared reference to our plugins
-my $plugins :shared;
-my %real_plugins;
-$plugins = share(%real_plugins);
-my $plugin_lock = Thread::Semaphore->new();
-
-my @cmd_list;
-my @undoc_cmd_list;
-my @admin_cmd_list;
-
-my %authed_nicks :shared;
-my $nick_lock = Thread::Semaphore->new();
-
-my $in_queue = Thread::Queue->new();
-my $out_queue = Thread::Queue->new();
-
-# Worker threads dispatched for commands
-# Probably should be removed when they're done?
-my @workers;
-
 # Create a worker thread and store it in workers
 sub create_cmd_worker;
 
@@ -101,6 +76,31 @@ sub irc_kick;
 sub is_authed;
 sub authed_as;
 sub is_admin;
+
+my $sock;
+my $sock_lock = Thread::Semaphore->new(2);
+
+my $has_connected :shared = 0;
+
+# shared reference to our plugins
+my $plugins :shared;
+my %real_plugins;
+$plugins = share(%real_plugins);
+my $plugin_lock = Thread::Semaphore->new();
+
+my @cmd_list;
+my @undoc_cmd_list;
+my @admin_cmd_list;
+
+my %authed_nicks :shared;
+my $nick_lock = Thread::Semaphore->new();
+
+my $in_queue = Thread::Queue->new();
+my $out_queue = Thread::Queue->new();
+
+# Worker threads dispatched for commands
+# Probably should be removed when they're done?
+my @workers;
 
 # Regex parsing of useful stuff
 my $match_ping = qr/^PING\s(.*)$/i;
@@ -655,7 +655,7 @@ sub start
 sub quit
 {
     my ($msg) = @_;
-    if (defined ($msg)) {
+    if (defined ($msg) && $msg !~ /\s*/) {
         send_msg "QUIT :$msg";
     }
     else {
@@ -673,7 +673,7 @@ sub irc_part
 {
     my ($channel, $reason) = @_;
 
-    if (defined ($reason)) {
+    if (defined ($reason) && $reason !~ /\s*/) {
         send_msg "PART $channel :$reason";
     }
     else {

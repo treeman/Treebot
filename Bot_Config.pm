@@ -26,5 +26,7 @@ our $log_pong = 0;
 
 our @admins = ('Mowah');
 
+our $plugin_folder = "plugin/";
+
 1;
 

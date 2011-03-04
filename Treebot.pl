@@ -6,11 +6,12 @@ use Test::More;
 
 use threads;
 use Thread::Queue;
+use Getopt::Long;
 
 use Log;
 use Bot_Config;
 use Irc;
-use Getopt::Long;
+use PluginHandling;
 
 my $test_mode = 0;
 GetOptions('test|t' => \$test_mode);
