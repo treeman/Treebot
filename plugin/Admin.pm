@@ -17,7 +17,6 @@ class Admin extends DefaultPlugin
 
     override process_admin_cmd ($sender, $target, $cmd, $arg)
     {
-        say "arg = '$arg'";
         if ($cmd eq "msg") {
             $arg =~ /^(\S+)\s+(\S+)$/;
             my $target = $1;

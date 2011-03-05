@@ -1,75 +1,87 @@
-﻿# Bugs
-*^C hangs on stdin getline, quits after enter
-*Plugins are not threaded properly, changes to variables won't work
-    Solution is to threat the plugin objects themselves as immutable
-    and to store everything mutable somewhere else? On file or in a thread-safe
-    object?
+﻿# Todo
+*Refactor the log, maybe different filtering. Consider finding a cpan repo for it.
+    I'm scattering too many "say" here and there, should be able to log it instead
+*Move around in load_plugins so it only loads what we haven't loaded yet
+*Reload a plugin
+*Git pull from <somewhere>
+    Check if core files have changed or just plugins files, then reload them
+    Otherwise we need to restart the script, from the new source
+    I heard that fork exec might work? Maybe? Might want to boot up a new script then?
+*Think about migrating the plugin handling to another file? Might be worth to
+    declutter Irc.pm? It's growing quite large.
+*Protect the other shared threadings perhaps? But perhaps they're fine where they are.
+
+# Bugs
+*^C hangs on stdin getline, quits after enter (only sometimes?)
 
 # Implemented
-*id
-*botsnack
-*git
-    current commit
-*log
-*cmds
-    add synnonym commands
-    list all commands
-*undocumented_cmds
-*admin_cmds
-*uptime
-*hello
-*status
-    I'm a teapot
 *admin
     checking for admin commands
     force recheck when nick quits and joins
     follows nick change, check admin auth nick - not the normal one
     admin authed nicks set in config
-*monkey island insults and retorts
+*botsnack
+*cmds
+    add synnonym commands
+    list all commands
+*git
+    current commit
+*hello
 *help
+    general help
     individual help messages
 *down? site
+*id
+*log
+*monkey island insults and retorts
+*pl
+*plugins
+    commands for loading/unloading plugins!
+    commands for checking what's loaded and what's possible to load
+*status
+*undocumented_cmds
+*uptime
 
 # Ideas/Commands
+*activity
+    how much the bot has been used
 *admin
     auto-op admins if we can
-*plugins
-    commands for loading/unloading/reloading plugins!
+*brainfuck
+*day9
+*episode
+    tv show
+*eval
+*gomtv live -> vlc link
+    juse use the python script for that one
 *git
     lines changed the last day/week/month (extract from git log -p <filename>)
     pull master origin, or others
-*insult/compliment
-*slap
-*kolli
-    check a package location
-*tell
-    tell a user something when he comes online
-*activity
-    how much the bot has been used
-*quotes
-    Duke
-    Monkey Island
-*lithcourse
-*lithschema
 *hackertop
-*manage topic
 *karma
     tell karma
     karma+
     karma-
-*polls
-*eval
-*brainfuck
-*lambdabot system
+*kolli
+    check a package location
 *imdb
-*day9
-*sc2casts
-*sc2 stats
+*lambdabot system
+*lithcourse
+*lithschema
 *madeoftree
+*manage topic
 *manga
+*plugins
+    commands for loading all/unloading all/reloading (all) plugins!
+*polls
+*sc2 stats
+*sc2casts
+*slap
+*tell
+    tell a user something when he comes online
 *wiki
-*episode
-    tv show
-*gomtv live -> vlc link
-    juse use the python script for that one
+*insult/compliment
+*quotes
+    Duke
+    Monkey Island
 

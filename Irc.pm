@@ -13,6 +13,7 @@ use Thread::Semaphore;
 use Plugin;
 use Log;
 use Bot_Config;
+use Util;
 
 # Create a worker thread and store it in workers
 sub create_cmd_worker;
@@ -203,14 +204,12 @@ sub load_plugins
     }
     closedir(DIR);
 
+    $plugin_lock->down();
     push (@cmd_list, "cmds");
     push (@cmd_list, "help");
 
     push (@admin_cmd_list, "admin_cmds");
-
-    @cmd_list = sort (@cmd_list);
-    @undoc_cmd_list = sort (@undoc_cmd_list);
-    @admin_cmd_list = sort (@admin_cmd_list);
+    $plugin_lock->up();
 }
 
 sub unload_plugins
@@ -227,109 +226,100 @@ sub unload_plugins
 sub load_plugin
 {
     my ($name) = @_;
-    say "We shall load $name!";
     my $file = resolve_plugin_name ($name);
 
     if ($file) {
-        load_plugin_file ($file);
+        return load_plugin_file ($file);
     }
     else {
-        say "$name isn't a plugin.";
+        Log::error "$name isn't a plugin.";
+        return "$name isn't a plugin.";
     }
 }
 sub load_plugin_file
 {
     my ($file) = @_;
 
-    if ($file =~ /\/([^\/]*)\.pm$/) {
-        my $name = $1;
-        if (!defined ($plugins->{$file})) {
-            say "Requering $file";
-            require $file;
+    if ($file !~ /\/([^\/]*)\.pm$/) {
+        return "We couldn't find anything loadable.";
+    }
+    my $name = $1;
 
-            if ($name->can('new')) {
-                my $plugin = $name->new();
-                if ($plugin->DOES('Plugin')) {
-                    say "Loading $file";
+    if (defined ($plugins->{$file})) {
+        Log::error "$file already loaded";
+        return "Plugin already loaded, try to reload instead.";
+    }
 
-                    $plugin_lock->down();
+    require $file;
 
-                    $plugins->{$file} = share($plugin);
-                    $plugin->load();
+    if (!$name->can('new')){
+        Log::error "$name doesn't have a new method, not a valid Moose class.";
+        return "Oops $file seems to have some errors in it.";
+    }
+    my $plugin = $name->new();
 
-                    my @cmds = $plugin->cmds();
-                    for my $cmd (@cmds) {
-                        if ($cmd) {
-                            push (@cmd_list, $cmd);
-                        }
-                    }
+    if (!$plugin->DOES('Plugin')) {
+        Log::error "$file doesn't do the Plugin role!";
+        return "Oops $file seems to have some errors in it.";
+    }
 
-                    my @undoc_cmds = $plugin->undocumented_cmds();
-                    for my $cmd (@undoc_cmds) {
-                        if ($cmd) {
-                            push (@undoc_cmd_list, $cmd);
-                        }
-                    }
+    say "Loading $file";
 
-                    my @admin_cmds = $plugin->admin_cmds();
-                    for my $cmd (@admin_cmds) {
-                        if ($cmd) {
-                            push (@admin_cmd_list, $cmd);
-                        }
-                    }
-                    $plugin_lock->up();
-                }
-                else {
-                    Log::error("$file doesn't do the Plugin role!");
-                }
-            }
-            else {
-                say "$name doesn't do new!";
-            }
-        }
-        else {
-            say "$file is already loaded.";
+    $plugin_lock->down();
+
+    $plugins->{$file} = share($plugin);
+    $plugin->load();
+
+    my @cmds = $plugin->cmds();
+    for my $cmd (@cmds) {
+        if ($cmd) {
+            push (@cmd_list, $cmd);
         }
     }
+
+    my @undoc_cmds = $plugin->undocumented_cmds();
+    for my $cmd (@undoc_cmds) {
+        if ($cmd) {
+            push (@undoc_cmd_list, $cmd);
+        }
+    }
+
+    my @admin_cmds = $plugin->admin_cmds();
+    for my $cmd (@admin_cmds) {
+        if ($cmd) {
+            push (@admin_cmd_list, $cmd);
+        }
+    }
+    $plugin_lock->up();
+
+    @cmd_list = sort (@cmd_list);
+    @undoc_cmd_list = sort (@undoc_cmd_list);
+    @admin_cmd_list = sort (@admin_cmd_list);
+
+    return "$name loaded.";
 }
 sub unload_plugin
 {
     my ($name) = @_;
     my $file = resolve_plugin_name ($name);
 
+    $plugin_lock->down();
     if (defined ($plugins->{$file})) {
         say "Unloading $file";
 
         my $plugin = $plugins->{$file};
 
         my @cmds = $plugin->cmds();
-        #$plugin_lock->down();
-        @cmd_list = remove_matches(\@cmd_list, \@cmds);
-        say join (", ", @cmd_list);
-        #$plugin_lock->up();
+        @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
 
         $plugin->unload();
         delete $plugins->{$file};
-    }
-}
+        $plugin_lock->up();
 
-sub remove_matches
-{
-    my ($origin, $remove) = @_;
-    say join (", ", @{$origin});
-    say join (", ", @{$remove});
-
-    my %seen;
-    for (@{$origin}) {
-        $seen{$_} = 1;
+        return "$name unloaded.";
     }
 
-    for (@{$remove}) {
-        delete $seen{$_};
-    }
-    say join (", ", keys %seen);
-
-    return keys %seen;
+    return "Not loaded.";
 }
 
 sub reload_plugin
@@ -705,20 +695,28 @@ sub process_admin_cmd
         send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "load") {
-        load_plugin ($arg);
+        my @list = split (/ /, $arg);
+        for my $plugin (@list) {
+            my $msg = load_plugin ($plugin);
+            send_privmsg ($target, $msg);
+        }
     }
     elsif ($cmd eq "unload") {
-        unload_plugin ($arg);
+        my @list = split (/ /, $arg);
+        for my $plugin (@list) {
+            my $msg = unload_plugin ($plugin);
+            send_privmsg ($target, $msg);
+        }
     }
     elsif ($cmd eq "loaded") {
         my @plugins = list_loaded_plugins;
         my $list = join (", ", @plugins);
-        send_privmsg $target, $list;
+        send_privmsg ($target, $list);
     }
     elsif ($cmd eq "available") {
         my @plugins = list_available_plugins;
         my $list = join (", ", @plugins);
-        send_privmsg $target, $list;
+        send_privmsg ($target, $list);
     }
     else {
         $plugin_lock->down();
@@ -744,7 +742,7 @@ sub start
                                         Proto => 'tcp');
             ++$attempt;
             if (!$sock) {
-                say "Attempt $attempt failed..";
+                Log::error "Attempt $attempt failed..";
             }
 
             if ($attempt > 4) {
