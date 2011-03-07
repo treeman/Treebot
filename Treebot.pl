@@ -12,23 +12,34 @@ use Log;
 use Irc;
 use Plugin;
 
-my $test_mode = 0;
-GetOptions('test|t' => \$test_mode);
+my $test;
+my $dry;
+my $run_tests;
+my $verbose;
+my $log_verbose;
+
+GetOptions('test|t' => \$test,
+           'runtests' => \$run_tests,
+           'dry|d' => \$dry,
+           'verbose|v' => \$verbose,
+           'log_verbose|lg' => \$log_verbose);
 
 # register SIGINT failure for cleanup
 $SIG{INT} = \&quit;
 
 sub quit
 {
+    Irc::quit(@_);
+
     for my $thr (threads->list()) {
         $thr->detach();
     }
 
     Plugin::unload_all();
-    Irc::quit(@_);
-
     exit;
 }
 
-Irc::start($test_mode);
+Log::init($verbose, $log_verbose);
+
+Irc::start();
 

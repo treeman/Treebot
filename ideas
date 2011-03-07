@@ -1,0 +1,49 @@
+# Core
+*extensive testing
+    individual plugin tests
+    core testing
+*more command line params
+*more logging control
+*redirect error to logs
+
+# Commands
+*activity
+    how much the bot has been used
+*admin
+    auto-op admins if we can
+*brainfuck
+*day9
+*episode
+    tv show
+*eval
+*gomtv live -> vlc link
+    juse use the python script for that one
+*git
+    lines changed the last day/week/month (extract from git log -p <filename>)
+    pull master origin, or others
+*hackertop
+*karma
+    tell karma
+    karma+
+    karma-
+*kolli
+    check a package location
+*imdb
+*lambdabot system
+*lithcourse
+*lithschema
+*madeoftree
+*manage topic
+*manga
+*polls
+*sc2 stats
+*sc2casts
+*slap
+*tell
+    tell a user something when he comes online
+*wiki
+*insult/compliment
+*quotes
+    Duke
+    Monkey Island
+

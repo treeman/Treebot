@@ -5,6 +5,7 @@ package Irc;
 use Modern::Perl;
 use MooseX::Declare;
 use IO::Socket;
+use Carp;
 
 use threads;
 use threads::shared;
@@ -88,6 +89,10 @@ my $out_queue = Thread::Queue->new();
 
 # Worker threads dispatched for commands
 # Probably should be removed when they're done?
+# Dunno what it really does? It does nothing
+# But it might become useful if we want to catch runaway threads
+# However that would need a different approach where we watch
+# runtime and memory usage. How would one go about doing that?
 my @workers;
 
 # Regex parsing of useful stuff
@@ -450,12 +455,10 @@ sub process_cmd
         Irc::send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "recheck") {
-        say "Before recheck";
         $nick_lock->down();
 
         $authed_nicks{$sender} = undef;
         $nick_lock->up();
-        say "After recheck";
 
         is_authed $sender;
     }
@@ -529,23 +532,22 @@ sub process_admin_cmd
 
 sub start
 {
-    # If we shall connect with the socket. Used for testing from stdin only
-    my ($test_mode) = @_;
+    my ($dry, $test) = @_;
 
-    if (!$test_mode) {
+    if (!$dry) {
         my $attempt = 0;
         while (!$sock) {
             # Connect to the IRC server.
             $sock = new IO::Socket::INET(PeerAddr => $Conf::server,
-                                        PeerPort => $Conf::port,
-                                        Proto => 'tcp');
+                                         PeerPort => $Conf::port,
+                                         Proto => 'tcp');
             ++$attempt;
             if (!$sock) {
                 Log::error "Attempt $attempt failed..";
             }
 
             if ($attempt > 4) {
-                die "Couldn't connect, aborting.";
+                croak "Couldn't connect, aborting.";
             }
         }
 

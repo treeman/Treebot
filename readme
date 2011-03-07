@@ -39,52 +39,9 @@
 *monkey island insults and retorts
 *pl
 *plugins
-    commands for loading/unloading plugins!
+    commands for loading/unloading/reloading plugins dynamically!
     commands for checking what's loaded and what's possible to load
 *status
 *undocumented_cmds
 *uptime
-
-# Ideas/Commands
-*activity
-    how much the bot has been used
-*admin
-    auto-op admins if we can
-*brainfuck
-*day9
-*episode
-    tv show
-*eval
-*gomtv live -> vlc link
-    juse use the python script for that one
-*git
-    lines changed the last day/week/month (extract from git log -p <filename>)
-    pull master origin, or others
-*hackertop
-*karma
-    tell karma
-    karma+
-    karma-
-*kolli
-    check a package location
-*imdb
-*lambdabot system
-*lithcourse
-*lithschema
-*madeoftree
-*manage topic
-*manga
-*plugins
-    commands for loading all/unloading all/reloading (all) plugins!
-*polls
-*sc2 stats
-*sc2casts
-*slap
-*tell
-    tell a user something when he comes online
-*wiki
-*insult/compliment
-*quotes
-    Duke
-    Monkey Island
 

@@ -3,11 +3,56 @@
 use Modern::Perl;
 use FileHandle;
 
-use Conf;
-
 package Log;
 
-sub log_file_name
+use Carp;
+
+use Conf;
+
+my $fh;
+my $file_name;
+
+my $log_verbose;
+my $verbose;
+
+sub init
+{
+    ($verbose, $log_verbose) = @_;
+    open_log_file();
+
+    # Log warnings
+    $SIG{'__WARN__'} = \&error;
+}
+
+sub cmd { store (". ", @_); }
+sub out { store (": ", @_); }
+sub error { store ("! ", @_); }
+sub recieved { store ("< ", @_); }
+sub sent { store ("> ", @_); }
+sub plugin { store ("~ ", @_); }
+sub file { store ("\$ ", @_); }
+sub it { store ("? ", @_); }
+
+sub store
+{
+    my ($msg) = join("", @_);
+    chomp $msg;
+
+    my $blacklisted = blacklisted ($msg);
+
+    if ($verbose or !$blacklisted) {
+        say $msg;
+    }
+    if ($verbose or $log_verbose or !$blacklisted) {
+
+        if ($file_name ne file_name()) {
+            open_log_file();
+        }
+        say $fh $msg;
+    }
+}
+
+sub file_name
 {
     my @time = localtime();
     my ($year, $month, $day) = @time[5, 4, 3];
@@ -17,60 +62,16 @@ sub log_file_name
     return "${log_dir}$year-$month-$day.log";
 }
 
-sub get_log_file
+sub open_log_file
 {
-    my $log_file = log_file_name();
-    open my $fh, '>>', $log_file
-        or die "Couldn't open log file: '$log_file'\n$!\n";
-    return $fh;
+    $file_name = file_name();
+    open $fh, '>>', $file_name
+        or croak "Couldn't open log file: '$file_name'\n$!\n";
 }
 
-sub cmd
+sub blacklisted
 {
-    my $msg = "." . join("", @_);
-
-    my $fh = get_log_file();
-    say $fh $msg;
-}
-
-sub out
-{
-    my $msg = ": " . join("", @_);
-    say $msg;
-
-    my $fh = get_log_file();
-    say $fh $msg;
-}
-
-sub error
-{
-    my $msg = "! " . join("", @_);
-    say $msg;
-
-    my $fh = get_log_file();
-    say $fh $msg;
-}
-sub recieved
-{
-    # We might think of a prettier solution sometime
-    return if (!$Conf::log_ping && $_[0] =~ /^PING/);
-
-    my $msg = "< " . join("", @_);
-    say $msg;
-
-    my $fh = get_log_file();
-    say $fh $msg;
-}
-sub sent
-{
-    # We might think of a prettier solution sometime
-    return if (!$Conf::log_pong && $_[0] =~ /^PONG/);
-
-    my $msg = "> " . join("", @_);
-    say $msg;
-
-    my $fh = get_log_file();
-    say $fh $msg;
+    return 0;
 }
 
 1;

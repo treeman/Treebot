@@ -168,7 +168,7 @@ sub unload_all
     while (my ($name, $plugin) = (each %{$plugins}))
     {
         my $file = resolve_filepath ($name);
-        say "Unloading $file";
+        Log::plugin "Unloading $file";
 
         my @cmds = $plugin->cmds();
         @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
@@ -230,7 +230,7 @@ sub load_file
         return "Oops $file seems to have some errors in it.";
     }
 
-    say "Loading $file";
+    Log::plugin "Loading $file";
 
     $plugin_lock->down();
 
@@ -273,7 +273,7 @@ sub unload
 
     $plugin_lock->down();
     if (defined ($plugins->{$file})) {
-        say "Unloading $file";
+        Log::plugin "Unloading $file";
 
         my $plugin = $plugins->{$file};
 
