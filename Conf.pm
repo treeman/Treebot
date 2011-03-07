@@ -28,5 +28,17 @@ our @admins = ('Mowah');
 
 our $plugin_folder = "plugin/";
 
+our @log_blacklist = (
+    # Ping pong is interesting to play but not to watch
+    qr/^. PING/,
+    qr/^. PONG/,
+
+    # Huge messages
+    qr/^< \S+ (37\d|25\d)/,
+
+    # Dunno about this, seems not very useful - and large
+    qr/^< \S+ 005/,
+);
+
 1;
 

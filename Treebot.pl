@@ -12,11 +12,11 @@ use Log;
 use Irc;
 use Plugin;
 
-my $test;
-my $dry;
-my $run_tests;
-my $verbose;
-my $log_verbose;
+my $dry;            # Don't connect at all
+my $test;           # Run in test mode. Implies dry but connects directly
+my $run_tests;      # Run tests
+my $verbose;        # Verbose output, both log and stdout
+my $log_verbose;    # Verbose logging, stdout as usual
 
 GetOptions('test|t' => \$test,
            'runtests' => \$run_tests,
@@ -41,5 +41,5 @@ sub quit
 
 Log::init($verbose, $log_verbose);
 
-Irc::start();
+Irc::start($dry, $test);
 

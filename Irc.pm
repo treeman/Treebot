@@ -534,7 +534,7 @@ sub start
 {
     my ($dry, $test) = @_;
 
-    if (!$dry) {
+    if (!$test) {
         my $attempt = 0;
         while (!$sock) {
             # Connect to the IRC server.
@@ -566,7 +566,7 @@ sub start
         # so we can write to socket from other threads
         my $sock_writer = threads->create(\&socket_writer, $sock);
     }
-    else {
+    elsif (!$dry) {
         # Worker who outputs everything from the $out_queue to a log
         my $out_redirect = threads->create(\&out_redirect);
 

@@ -71,6 +71,13 @@ sub open_log_file
 
 sub blacklisted
 {
+    my ($msg) = @_;
+
+    for (@Conf::log_blacklist) {
+        if ($msg =~ /$_/) {
+            return 1;
+        }
+    }
     return 0;
 }
 
