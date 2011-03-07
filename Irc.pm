@@ -62,6 +62,8 @@ sub process_admin_cmd;
 sub start;
 # Will get called when we quit, either by SIGINT or regular quit
 sub quit;
+# Helper function to lockdown shared bool
+sub has_connected;
 
 # Irc helper functions
 sub irc_join;
@@ -79,6 +81,7 @@ my $sock_lock = Thread::Semaphore->new(2);
 my $has_connected :shared = 0;
 
 my %authed_nicks :shared;
+my $nick_lock = Thread::Semaphore->new();
 
 my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
@@ -279,15 +282,13 @@ sub parse_pre_login_recieved
         # Check the numerical responses from the server.
         if ($code =~ /004/) {
             # We managed to login, yay!
-            $has_connected = 1;
+            has_connected(1);
 
             # Actually load all plugins.
             Plugin::load_all();
 
             # We are now logged in, so join.
-            for my $channel (@Conf::channels) {
-                irc_join $channel;
-            }
+            irc_join @Conf::channels;
 
             # Register our nick if we're on quakenet
             if ($Conf::server =~ /quakenet/) {
@@ -326,30 +327,35 @@ sub process_irc_msg
         my $nick = $1;
         my $authed_nick = $2;
 
+        $nick_lock->down();
+
         $authed_nicks{$nick} = $authed_nick;
+        $nick_lock->up();
     }
     # End of whois
     elsif ($irc_cmd =~ /318/) {
         $param =~ /^\S+\s+(\S+)/;
         my $nick = $1;
 
-        lock(%authed_nicks);
+        $nick_lock->down();
 
         # If no entry, he isn't authed
         if (!defined($authed_nicks{$nick})) {
             $authed_nicks{$nick} = 0;
         }
+        $nick_lock->up();
     }
     elsif ($irc_cmd =~ /QUIT|PART/) {
         $prefix =~ /^(.+?)!~/;
         my $nick = $1;
 
-        lock(%authed_nicks);
+        $nick_lock->down();
 
         # If entry exists, set it to 0
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = 0;
         }
+        $nick_lock->up();
     }
     elsif ($irc_cmd =~ /JOIN/) {
         $prefix =~ /^(.+?)!~/;
@@ -357,16 +363,13 @@ sub process_irc_msg
 
         if ($nick eq $Conf::nick) { return };
 
-        lock(%authed_nicks);
+        $nick_lock->down();
 
         # If we have an entry of this fellaw, undef it so we must check it again
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = undef;
         }
-
-        # Worker thread so we don't hang up when waiting for end of whois response
-        #my $thr = threads->create (\&is_admin, $nick);
-        #$thr->detach();
+        $nick_lock->up();
     }
     elsif ($irc_cmd =~ /NICK/) {
         $prefix =~ /^(.+?)!~/;
@@ -377,12 +380,13 @@ sub process_irc_msg
 
         if ($old_nick eq $Conf::nick) { return };
 
-        lock(%authed_nicks);
+        $nick_lock->down();
 
         if (exists($authed_nicks{$old_nick})) {
             $authed_nicks{$new_nick} = $authed_nicks{$old_nick};
             $authed_nicks{$old_nick} = undef;
         }
+        $nick_lock->up();
     }
 }
 
@@ -425,16 +429,12 @@ sub process_cmd
         }
         else {
             my $help_sent = 0;
-            Plugin::down();
-            for my $plugin (values %{$Plugin::plugins})
-            {
-                my $help = $plugin->cmd_help ($arg);
-                if (defined ($help) && length ($help)) {
-                    Irc::send_privmsg ($target, $help);
-                    $help_sent = 1;
-                }
+
+            my @help = Plugin::get_cmd_help ($arg);
+            for (@help) {
+                Irc::send_privmsg ($target, $_);
+                $help_sent = 1;
             }
-            Plugin::up();
 
             if (!$help_sent) {
                 Irc::send_privmsg ($target, $Conf::help_missing);
@@ -442,17 +442,21 @@ sub process_cmd
         }
     }
     elsif ($cmd =~ /^cmds|commands$/) {
-        my $msg = "Documented commands: " . join(", ", @Plugin::cmd_list);
+        my $msg = "Documented commands: " . join(", ", Plugin::cmds());
         Irc::send_privmsg ($target, $msg);
     }
     elsif ($cmd =~ /undocumented_?cmds|undoc/) {
-        my $msg = "Undocumented commands: " . join(", ", @Plugin::undoc_cmd_list);
+        my $msg = "Undocumented commands: " . join(", ", Plugin::undoc_cmds());
         Irc::send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "recheck") {
-        lock(%authed_nicks);
+        say "Before recheck";
+        $nick_lock->down();
 
         $authed_nicks{$sender} = undef;
+        $nick_lock->up();
+        say "After recheck";
+
         is_authed $sender;
     }
     else {
@@ -472,7 +476,7 @@ sub process_admin_cmd
         main::quit ($arg);
     }
     elsif ($cmd =~ /^admin_?cmds$/) {
-        my $msg = "Admin commands: " . join(", ", @Plugin::admin_cmd_list);
+        my $msg = "Admin commands: " . join(", ", Plugin::admin_cmds());
         send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "load") {
@@ -565,7 +569,7 @@ sub start
         my $out_redirect = threads->create(\&out_redirect);
 
         # We have "connected"
-        $has_connected = 1;
+        has_connected(1);
         Plugin::load_all();
     }
 
@@ -589,7 +593,8 @@ sub start
             }
             # Prevent segfaulting if we're trying to dispatch a command
             # before we've connected and loaded our plugins
-            elsif ($has_connected) {
+            #elsif ($has_connected) {
+            elsif (has_connected()) {
                 # Empty sender and target means the command is internal
                 create_cmd_worker(\&process_cmd, "", "", $cmd, $arg);
             }
@@ -602,7 +607,7 @@ sub start
             send_msg "PONG $1";
         }
 
-        if ($has_connected) {
+        if (has_connected()) {
             parse_recieved $input;
         }
         else {
@@ -621,6 +626,17 @@ sub quit
     else {
         send_msg "QUIT :$Conf::quit_msg";
     }
+}
+
+sub has_connected
+{
+    my ($new_val) = @_;
+
+    if (defined ($new_val)) {
+        lock($has_connected);
+        $has_connected = $new_val;
+    }
+    return $has_connected;
 }
 
 sub irc_join
@@ -651,9 +667,13 @@ sub is_authed
     my $whois_sent = 0;
 
     while (1) {
-        lock(%authed_nicks);
+        my $defined;
 
-        if (defined($authed_nicks{$nick})) {
+        $nick_lock->down();
+        $defined = defined ($authed_nicks{$nick});
+        $nick_lock->up();
+
+        if ($defined) {
             if ($authed_nicks{$nick}) {
                 return 1;
             }
@@ -674,9 +694,12 @@ sub is_authed
 sub authed_as
 {
     my ($nick) = @_;
-    lock(%authed_nicks);
 
-    return $authed_nicks{$nick};
+    $nick_lock->down();
+    my $auth = $authed_nicks{$nick};
+    $nick_lock->up();
+
+    return $auth;
 }
 
 sub is_admin
@@ -686,15 +709,17 @@ sub is_admin
     # If sent from stdin
     if ($nick eq "") { return 1; }
 
-    lock(%authed_nicks);
-
     if (is_authed ($nick)) {
+        $nick_lock->down();
+
         my $authed_nick = $authed_nicks{$nick};
         for my $admin (@Conf::admins) {
             if ($admin eq $authed_nick) {
+                $nick_lock->up();
                 return 1;
             }
         }
+        $nick_lock->up();
     }
     return 0;
 }

@@ -83,17 +83,14 @@ sub process_bare_msg;
 sub get_cmd_help;
 
 # shared reference to our plugins
-our $plugins :shared;
+my $plugins :shared;
 my %real_plugins;
 $plugins = share(%real_plugins);
 my $plugin_lock = Thread::Semaphore->new();
 
-our @cmd_list :shared;
-our @undoc_cmd_list :shared;
-our @admin_cmd_list :shared;
-
-sub down { $plugin_lock->down(); }
-sub up { $plugin_lock->up(); }
+my @cmd_list :shared;
+my @undoc_cmd_list :shared;
+my @admin_cmd_list :shared;
 
 sub resolve_filepath
 {
@@ -283,6 +280,12 @@ sub unload
         my @cmds = $plugin->cmds();
         @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
 
+        my @undoc_cmds = $plugin->cmds();
+        @undoc_cmd_list = Util::remove_matches(\@undoc_cmd_list, \@cmds);
+
+        my @admin_cmds = $plugin->cmds();
+        @admin_cmd_list = Util::remove_matches(\@admin_cmd_list, \@cmds);
+
         $plugin->unload();
         delete $plugins->{$file};
         $plugin_lock->up();
@@ -297,8 +300,8 @@ sub reload
 {
     my ($name) = @_;
 
-    unload_plugin ($name);
-    load_plugin ($name);
+    unload ($name);
+    load ($name);
 
     return "$name reloaded.";
 }
@@ -372,7 +375,19 @@ sub process_bare_msg
 
 sub get_cmd_help
 {
+    my @help;
 
+    $plugin_lock->down();
+    for my $plugin (values %{$plugins})
+    {
+        my $help = $plugin->cmd_help (@_);
+        if ($help) {
+            push (@help, $help);
+        }
+    }
+    $plugin_lock->up();
+
+    return @help;
 }
 
 1;
