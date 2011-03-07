@@ -12,23 +12,11 @@ use Thread::Semaphore;
 
 use Plugin;
 use Log;
-use Bot_Config;
+use Conf;
 use Util;
 
 # Create a worker thread and store it in workers
 sub create_cmd_worker;
-
-# Plugin handling
-sub resolve_plugin_name;
-sub list_loaded_plugins;
-sub list_available_plugins;
-
-sub load_plugins;
-sub unload_plugins;
-
-sub load_plugin;
-sub unload_plugin;
-sub reload_plugin;
 
 # Thread for listening to stdin and dispatching cmds and stuff
 sub stdin_listener;
@@ -90,18 +78,7 @@ my $sock_lock = Thread::Semaphore->new(2);
 
 my $has_connected :shared = 0;
 
-# shared reference to our plugins
-my $plugins :shared;
-my %real_plugins;
-$plugins = share(%real_plugins);
-my $plugin_lock = Thread::Semaphore->new();
-
-my @cmd_list :shared;
-my @undoc_cmd_list :shared;
-my @admin_cmd_list :shared;
-
 my %authed_nicks :shared;
-my $nick_lock = Thread::Semaphore->new();
 
 my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
@@ -115,7 +92,7 @@ my $match_ping = qr/^PING\s(.*)$/i;
 
 my $match_cmd =
     qr/
-        ^\Q$Bot_Config::cmd_prefix\E  # cmd prefix
+        ^\Q$Conf::cmd_prefix\E  # cmd prefix
         (\S*)                         # (1) cmd
         \s*
         (.*)                          # (2) args
@@ -143,190 +120,6 @@ sub create_cmd_worker
     my $thr = threads->create($f, @_);
     push (@workers, $thr);
 }
-
-sub resolve_plugin_name
-{
-    my ($name) = @_;
-    my $dir = $Bot_Config::plugin_folder;
-    my $file = $name;
-
-    if ($file !~ /^.*\.pm$/) {
-        $file = $file . ".pm";
-    }
-    if ($file !~ /^\E$dir\Q/) {
-        $file = $dir . $file;
-    }
-
-    if (-e $file) {
-        return $file;
-    }
-    else {
-        return "";
-    }
-}
-sub list_loaded_plugins
-{
-    my @list;
-
-    for my $path (keys %{$plugins}) {
-        if ($path =~ /\/([^\/]*)\.pm$/) {
-            push (@list, $1);
-        }
-    }
-    return sort @list;
-}
-sub list_available_plugins
-{
-    my @list;
-
-    my $dir = $Bot_Config::plugin_folder;
-    opendir(DIR, $dir) or die "can't open dir $dir: $!";
-    while (defined (my $file = readdir(DIR))) {
-        if ($file =~ /(.*)\.pm/) {
-            push (@list, $1);
-        }
-    }
-    closedir(DIR);
-
-    return sort @list;
-}
-
-sub load_plugins
-{
-    # try to load all files in the plugins folder
-    push (@INC, $Bot_Config::plugin_folder);
-
-    my $dirname = $Bot_Config::plugin_folder;
-
-    opendir(DIR, $dirname) or die "can't open dir $dirname: $!";
-    while (defined (my $file = readdir(DIR))) {
-        load_plugin_file ("$dirname$file");
-    }
-    closedir(DIR);
-
-    $plugin_lock->down();
-    push (@cmd_list, "cmds");
-    push (@cmd_list, "help");
-
-    push (@admin_cmd_list, "admin_cmds");
-    $plugin_lock->up();
-}
-
-sub unload_plugins
-{
-    $plugin_lock->down();
-    for my $plugin (values %{$plugins})
-    {
-        $plugin->unload();
-    }
-    %{$plugins} = ();
-    $plugin_lock->up();
-}
-
-sub load_plugin
-{
-    my ($name) = @_;
-    my $file = resolve_plugin_name ($name);
-
-    if ($file) {
-        return load_plugin_file ($file);
-    }
-    else {
-        Log::error "$name isn't a plugin.";
-        return "$name isn't a plugin.";
-    }
-}
-sub load_plugin_file
-{
-    my ($file) = @_;
-
-    if ($file !~ /\/([^\/]*)\.pm$/) {
-        return "We couldn't find anything loadable.";
-    }
-    my $name = $1;
-
-    if (defined ($plugins->{$file})) {
-        Log::error "$file already loaded";
-        return "Plugin already loaded, try to reload instead.";
-    }
-
-    require $file;
-
-    if (!$name->can('new')){
-        Log::error "$name doesn't have a new method, not a valid Moose class.";
-        return "Oops $file seems to have some errors in it.";
-    }
-    my $plugin = $name->new();
-
-    if (!$plugin->DOES('Plugin')) {
-        Log::error "$file doesn't do the Plugin role!";
-        return "Oops $file seems to have some errors in it.";
-    }
-
-    say "Loading $file";
-
-    $plugin_lock->down();
-
-    $plugins->{$file} = share($plugin);
-    $plugin->load();
-
-    my @cmds = $plugin->cmds();
-    for my $cmd (@cmds) {
-        if ($cmd) {
-            push (@cmd_list, $cmd);
-        }
-    }
-
-    my @undoc_cmds = $plugin->undocumented_cmds();
-    for my $cmd (@undoc_cmds) {
-        if ($cmd) {
-            push (@undoc_cmd_list, $cmd);
-        }
-    }
-
-    my @admin_cmds = $plugin->admin_cmds();
-    for my $cmd (@admin_cmds) {
-        if ($cmd) {
-            push (@admin_cmd_list, $cmd);
-        }
-    }
-    $plugin_lock->up();
-
-    @cmd_list = sort (@cmd_list);
-    @undoc_cmd_list = sort (@undoc_cmd_list);
-    @admin_cmd_list = sort (@admin_cmd_list);
-
-    return "$name loaded.";
-}
-sub unload_plugin
-{
-    my ($name) = @_;
-    my $file = resolve_plugin_name ($name);
-
-    $plugin_lock->down();
-    if (defined ($plugins->{$file})) {
-        say "Unloading $file";
-
-        my $plugin = $plugins->{$file};
-
-        my @cmds = $plugin->cmds();
-        @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
-
-        $plugin->unload();
-        delete $plugins->{$file};
-        $plugin_lock->up();
-
-        return "$name unloaded.";
-    }
-
-    return "Not loaded.";
-}
-
-sub reload_plugin
-{
-
-}
-
 sub stdin_listener
 {
     while(<STDIN>) {
@@ -366,7 +159,7 @@ sub sock_listener
     my ($sock) = @_;
     while(my $input = read_sock($sock)) {
         # Prevent the server from being confused with our own input commands
-        if ($input =~ /^\Q$Bot_Config::cmd_prefix\E/) {
+        if ($input =~ /^\Q$Conf::cmd_prefix\E/) {
             $input = "\\$input";
         }
         $in_queue->enqueue($input);
@@ -448,12 +241,7 @@ sub parse_recieved
 {
     my ($msg) = @_;
 
-    $plugin_lock->down();
-    for my $plugin (values %{$plugins})
-    {
-        $plugin->process_bare_msg ($msg);
-    }
-    $plugin_lock->up();
+    Plugin::process_bare_msg ($msg);
 
     if ($msg =~ $match_irc_msg) {
         my $prefix;
@@ -494,28 +282,28 @@ sub parse_pre_login_recieved
             $has_connected = 1;
 
             # Actually load all plugins.
-            load_plugins();
+            Plugin::load_all();
 
             # We are now logged in, so join.
-            for my $channel (@Bot_Config::channels) {
+            for my $channel (@Conf::channels) {
                 irc_join $channel;
             }
 
             # Register our nick if we're on quakenet
-            if ($Bot_Config::server =~ /quakenet/) {
+            if ($Conf::server =~ /quakenet/) {
                 open my $fh, '<', "Q-pass";
                 my $pass = <$fh>;
                 chomp $pass;
                 send_privmsg
                     'Q@CServe.quakenet.org',
-                    "AUTH $Bot_Config::nick $pass";
+                    "AUTH $Conf::nick $pass";
             }
         }
         # Nickname in use
         elsif ($code =~ /433/) {
             # Instead of death try to force use of some random nickname.
             my $rand_int = int(rand(100));
-            send_msg "NICK $Bot_Config::nick$rand_int";
+            send_msg "NICK $Conf::nick$rand_int";
         }
     }
     else {
@@ -527,12 +315,7 @@ sub process_irc_msg
 {
     my ($prefix, $irc_cmd, $param) = @_;
 
-    $plugin_lock->down();
-    for my $plugin (values %{$plugins})
-    {
-        $plugin->process_irc_msg ($prefix, $irc_cmd, $param);
-    }
-    $plugin_lock->up();
+    Plugin::process_irc_msg ($prefix, $irc_cmd, $param);
 
     if ($irc_cmd =~ /PRIVMSG/) {
         process_privmsg ($prefix, $irc_cmd, $param);
@@ -550,16 +333,18 @@ sub process_irc_msg
         $param =~ /^\S+\s+(\S+)/;
         my $nick = $1;
 
+        lock(%authed_nicks);
+
         # If no entry, he isn't authed
         if (!defined($authed_nicks{$nick})) {
-            $nick_lock->down();
-                $authed_nicks{$nick} = 0;
-            $nick_lock->up();
+            $authed_nicks{$nick} = 0;
         }
     }
     elsif ($irc_cmd =~ /QUIT|PART/) {
         $prefix =~ /^(.+?)!~/;
         my $nick = $1;
+
+        lock(%authed_nicks);
 
         # If entry exists, set it to 0
         if (exists($authed_nicks{$nick})) {
@@ -570,7 +355,9 @@ sub process_irc_msg
         $prefix =~ /^(.+?)!~/;
         my $nick = $1;
 
-        if ($nick eq $Bot_Config::nick) { return };
+        if ($nick eq $Conf::nick) { return };
+
+        lock(%authed_nicks);
 
         # If we have an entry of this fellaw, undef it so we must check it again
         if (exists($authed_nicks{$nick})) {
@@ -588,7 +375,9 @@ sub process_irc_msg
         $param =~ /^:(.*)/;
         my $new_nick = $1;
 
-        if ($old_nick eq $Bot_Config::nick) { return };
+        if ($old_nick eq $Conf::nick) { return };
+
+        lock(%authed_nicks);
 
         if (exists($authed_nicks{$old_nick})) {
             $authed_nicks{$new_nick} = $authed_nicks{$old_nick};
@@ -610,7 +399,7 @@ sub process_privmsg
 
         # if we're the target change target so we don't message ourselves
         # this looks pretty bad really, change?
-        if ($target =~ /$Bot_Config::nick/) {
+        if ($target =~ /$Conf::nick/) {
             $target = $sender;
         }
 
@@ -621,12 +410,7 @@ sub process_privmsg
             create_cmd_worker (\&process_cmd, $sender, $target, $cmd, $arg);
         }
         else {
-            $plugin_lock->down();
-            for my $plugin (values %{$plugins})
-            {
-                $plugin->process_privmsg ($sender, $target, $msg);
-            }
-            $plugin_lock->up();
+            Plugin::process_privmsg ($sender, $target, $msg);
         }
     }
 }
@@ -637,12 +421,12 @@ sub process_cmd
 
     if ($cmd eq "help") {
         if ($arg =~ /^\s*$/) {
-            Irc::send_privmsg ($target, $Bot_Config::help_msg);
+            Irc::send_privmsg ($target, $Conf::help_msg);
         }
         else {
             my $help_sent = 0;
-            $plugin_lock->down();
-            for my $plugin (values %{$plugins})
+            Plugin::down();
+            for my $plugin (values %{$Plugin::plugins})
             {
                 my $help = $plugin->cmd_help ($arg);
                 if (defined ($help) && length ($help)) {
@@ -650,32 +434,29 @@ sub process_cmd
                     $help_sent = 1;
                 }
             }
-            $plugin_lock->up();
+            Plugin::up();
 
             if (!$help_sent) {
-                Irc::send_privmsg ($target, $Bot_Config::help_missing);
+                Irc::send_privmsg ($target, $Conf::help_missing);
             }
         }
     }
     elsif ($cmd =~ /^cmds|commands$/) {
-        my $msg = "Documented commands: " . join(", ", @cmd_list);
+        my $msg = "Documented commands: " . join(", ", @Plugin::cmd_list);
         Irc::send_privmsg ($target, $msg);
     }
-    elsif ($cmd =~ /undocumented_?cmds/) {
-        my $msg = "Undocumented commands: " . join(", ", @undoc_cmd_list);
+    elsif ($cmd =~ /undocumented_?cmds|undoc/) {
+        my $msg = "Undocumented commands: " . join(", ", @Plugin::undoc_cmd_list);
         Irc::send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "recheck") {
+        lock(%authed_nicks);
+
         $authed_nicks{$sender} = undef;
         is_authed $sender;
     }
     else {
-        $plugin_lock->down();
-        for my $plugin (values %{$plugins})
-        {
-            $plugin->process_cmd ($sender, $target, $cmd, $arg);
-        }
-        $plugin_lock->up();
+        Plugin::process_cmd ($sender, $target, $cmd, $arg);
     }
 
     if (is_admin($sender)) {
@@ -691,40 +472,54 @@ sub process_admin_cmd
         main::quit ($arg);
     }
     elsif ($cmd =~ /^admin_?cmds$/) {
-        my $msg = "Admin commands: " . join(", ", @admin_cmd_list);
+        my $msg = "Admin commands: " . join(", ", @Plugin::admin_cmd_list);
         send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "load") {
         my @list = split (/ /, $arg);
         for my $plugin (@list) {
-            my $msg = load_plugin ($plugin);
+            my $msg = Plugin::load ($plugin);
             send_privmsg ($target, $msg);
         }
     }
     elsif ($cmd eq "unload") {
         my @list = split (/ /, $arg);
         for my $plugin (@list) {
-            my $msg = unload_plugin ($plugin);
+            my $msg = Plugin::unload ($plugin);
+            send_privmsg ($target, $msg);
+        }
+    }
+    elsif ($cmd eq "load_all") {
+        Plugin::load_all();
+        send_privmsg ($target, "Loading all not loaded.");
+    }
+    elsif ($cmd eq "reload_all") {
+        Plugin::reload_all();
+        send_privmsg ($target, "Reloading all.");
+    }
+    elsif ($cmd eq "unload_all") {
+        Plugin::unload_all();
+        send_privmsg ($target, "Unloading all.");
+    }
+    elsif ($cmd eq "reload") {
+        my @list = split (/ /, $arg);
+        for my $plugin (@list) {
+            my $msg = Plugin::reload ($plugin);
             send_privmsg ($target, $msg);
         }
     }
     elsif ($cmd eq "loaded") {
-        my @plugins = list_loaded_plugins;
+        my @plugins = Plugin::loaded();
         my $list = join (", ", @plugins);
         send_privmsg ($target, $list);
     }
     elsif ($cmd eq "available") {
-        my @plugins = list_available_plugins;
+        my @plugins = Plugin::available();
         my $list = join (", ", @plugins);
         send_privmsg ($target, $list);
     }
     else {
-        $plugin_lock->down();
-        for my $plugin (values %{$plugins})
-        {
-            $plugin->process_admin_cmd ($sender, $target, $cmd, $arg);
-        }
-        $plugin_lock->up();
+        Plugin::process_admin_cmd ($sender, $target, $cmd, $arg);
     }
 }
 
@@ -737,8 +532,8 @@ sub start
         my $attempt = 0;
         while (!$sock) {
             # Connect to the IRC server.
-            $sock = new IO::Socket::INET(PeerAddr => $Bot_Config::server,
-                                        PeerPort => $Bot_Config::port,
+            $sock = new IO::Socket::INET(PeerAddr => $Conf::server,
+                                        PeerPort => $Conf::port,
                                         Proto => 'tcp');
             ++$attempt;
             if (!$sock) {
@@ -754,8 +549,8 @@ sub start
         $sock_lock->up(2);
 
         # Log on to the server.
-        send_msg "NICK $Bot_Config::nick";
-        send_msg "USER $Bot_Config::username 0 * :$Bot_Config::realname";
+        send_msg "NICK $Conf::nick";
+        send_msg "USER $Conf::username 0 * :$Conf::realname";
 
         # Worker thread so we can handle both socket input
         # and stdin input through queues.
@@ -771,7 +566,7 @@ sub start
 
         # We have "connected"
         $has_connected = 1;
-        load_plugins();
+        Plugin::load_all();
     }
 
     # Worker thread for listening and parsing stdin cmds
@@ -819,11 +614,12 @@ sub start
 sub quit
 {
     my ($msg) = @_;
-    if (defined ($msg) && $msg !~ /\s*/) {
+
+    if ($msg) {
         send_msg "QUIT :$msg";
     }
     else {
-        send_msg "QUIT :$Bot_Config::quit_msg";
+        send_msg "QUIT :$Conf::quit_msg";
     }
 }
 
@@ -837,7 +633,7 @@ sub irc_part
 {
     my ($channel, $reason) = @_;
 
-    if (defined ($reason) && $reason !~ /\s*/) {
+    if ($reason) {
         send_msg "PART $channel :$reason";
     }
     else {
@@ -855,6 +651,8 @@ sub is_authed
     my $whois_sent = 0;
 
     while (1) {
+        lock(%authed_nicks);
+
         if (defined($authed_nicks{$nick})) {
             if ($authed_nicks{$nick}) {
                 return 1;
@@ -876,6 +674,8 @@ sub is_authed
 sub authed_as
 {
     my ($nick) = @_;
+    lock(%authed_nicks);
+
     return $authed_nicks{$nick};
 }
 
@@ -886,9 +686,11 @@ sub is_admin
     # If sent from stdin
     if ($nick eq "") { return 1; }
 
+    lock(%authed_nicks);
+
     if (is_authed ($nick)) {
         my $authed_nick = $authed_nicks{$nick};
-        for my $admin (@Bot_Config::admins) {
+        for my $admin (@Conf::admins) {
             if ($admin eq $authed_nick) {
                 return 1;
             }

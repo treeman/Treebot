@@ -2,7 +2,7 @@
 
 use Modern::Perl;
 
-package Bot_Config;
+package Conf;
 
 our $server = "irc.quakenet.org";
 our $port = 6667;

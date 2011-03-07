@@ -1,8 +1,11 @@
 ﻿# Todo
 *Refactor the log, maybe different filtering. Consider finding a cpan repo for it.
     I'm scattering too many "say" here and there, should be able to log it instead
-*Move around in load_plugins so it only loads what we haven't loaded yet
-*Reload a plugin
+*Better return handling for plugin handling
+    For _all commands return how many plugins were affected
+    Log error if something bad happens and better returning messages
+    If nothing is loaded show a message
+    Fix unload_all load_all, and reload_all!
 *Git pull from <somewhere>
     Check if core files have changed or just plugins files, then reload them
     Otherwise we need to restart the script, from the new source

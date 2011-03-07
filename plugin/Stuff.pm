@@ -5,7 +5,7 @@ use Test::More;
 
 use MooseX::Declare;
 use Plugin;
-use Bot_Config;
+use Conf;
 
 use Time::Seconds;
 
@@ -90,7 +90,7 @@ class Stuff extends DefaultPlugin
                 håjj\s?håjj
               )
               \s+                 # Mannered men don't use random words after greeting
-              $Bot_Config::nick
+              $Conf::nick
               (                   # Of course some exclamationmarks are cool
                 [!\?\s]*
               )

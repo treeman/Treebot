@@ -3,7 +3,7 @@
 use Modern::Perl;
 use FileHandle;
 
-use Bot_Config;
+use Conf;
 
 package Log;
 
@@ -13,7 +13,7 @@ sub log_file_name
     my ($year, $month, $day) = @time[5, 4, 3];
     $year += 1900;
 
-    my $log_dir = $Bot_Config::log_dir;
+    my $log_dir = $Conf::log_dir;
     return "${log_dir}$year-$month-$day.log";
 }
 
@@ -53,7 +53,7 @@ sub error
 sub recieved
 {
     # We might think of a prettier solution sometime
-    return if (!$Bot_Config::log_ping && $_[0] =~ /^PING/);
+    return if (!$Conf::log_ping && $_[0] =~ /^PING/);
 
     my $msg = "< " . join("", @_);
     say $msg;
@@ -64,7 +64,7 @@ sub recieved
 sub sent
 {
     # We might think of a prettier solution sometime
-    return if (!$Bot_Config::log_pong && $_[0] =~ /^PONG/);
+    return if (!$Conf::log_pong && $_[0] =~ /^PONG/);
 
     my $msg = "> " . join("", @_);
     say $msg;

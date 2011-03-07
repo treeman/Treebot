@@ -9,9 +9,8 @@ use Thread::Queue;
 use Getopt::Long;
 
 use Log;
-use Bot_Config;
 use Irc;
-use PluginHandling;
+use Plugin;
 
 my $test_mode = 0;
 GetOptions('test|t' => \$test_mode);
@@ -25,7 +24,7 @@ sub quit
         $thr->detach();
     }
 
-    Irc::unload_plugins();
+    Plugin::unload_all();
     Irc::quit(@_);
 
     exit;
