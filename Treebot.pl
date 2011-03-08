@@ -66,8 +66,6 @@ sub quit
     exit;
 }
 
-$SIG{CHLD} = "IGNORE";
-
 sub restart
 {
     Irc::quit ("Restarting...");

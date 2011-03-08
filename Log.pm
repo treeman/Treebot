@@ -45,6 +45,7 @@ sub store
     my $blacklisted = blacklisted ($msg);
     my $whitelisted = whitelisted ($msg);
 
+    # Shall I say?
     if ($bare or $show_bare) {
         if ($whitelisted) {
             say $msg;
@@ -57,6 +58,7 @@ sub store
         say $msg;
     }
 
+    # Or shall I log now?
     if ($bare) {
         if ($whitelisted) {
             output ($msg);
@@ -68,21 +70,6 @@ sub store
     elsif (!$blacklisted) {
         output ($msg);
     }
-
-    #if ($bare) {
-        #if ($whitelisted) {
-            #say $msg;
-            #output ($msg);
-        #}
-    #}
-    #else {
-        #if ($verbose or !$blacklisted) {
-            #say $msg;
-        #}
-        #if ($verbose or $log_verbose or !$blacklisted) {
-            #output ($msg);
-        #}
-    #}
 }
 
 sub output

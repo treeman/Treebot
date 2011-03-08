@@ -3,20 +3,18 @@
     For _all commands return how many plugins were affected
     Log error if something bad happens and better returning messages
     If nothing is loaded show a message
-    Fix unload_all load_all, and reload_all!
 *Git pull from <somewhere>
-    Check if core files have changed or just plugins files, then reload them
-    Otherwise we need to restart the script, from the new source
-    I heard that fork exec might work? Maybe? Might want to boot up a new script then?
-*Think about migrating the plugin handling to another file? Might be worth to
-    declutter Irc.pm? It's growing quite large.
+    Check if core files have changed or just plugins files, then reload or restart
 *Protect the other shared threadings perhaps? But perhaps they're fine where they are.
+*Refactor hardcoded cmd lists
+*Descriptive readme with command line options and stuff?
 
 # Bugs
 *^C hangs on stdin getline, quits after enter (only sometimes?)
 *Plugin::run_tests couldn't be run from a different thread (CoreTests::run_tests)
     My solution was to run the tests from the main thread
     It's strange because threaded cmd_workers can use Plugin functions just fine
+*When reloading plugins the hardcoded cmd lists will duplicate the hardcoded cmds
 
 # Implemented
 *admin
@@ -45,4 +43,5 @@
 *status
 *undocumented_cmds
 *uptime
+*restart
 

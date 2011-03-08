@@ -43,8 +43,11 @@ our @log_blacklist = (
 
 # Used to only show bare essentials
 our @log_whitelist = (
+    # Interesting stuff
     qr/PRIVMSG/,
     qr/JOIN|PART|QUIT/,
+
+    # Errors and exe stuff
     qr/^[!*]/,
 );
 

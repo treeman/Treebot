@@ -178,6 +178,12 @@ sub unload_all
         my @cmds = $plugin->cmds();
         @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
 
+        my @undoc_cmds = $plugin->cmds();
+        @undoc_cmd_list = Util::remove_matches(\@undoc_cmd_list, \@undoc_cmds);
+
+        my @admin_cmds = $plugin->cmds();
+        @admin_cmd_list = Util::remove_matches(\@admin_cmd_list, \@admin_cmds);
+
         $plugin->unload();
         delete $plugins->{$name};
     }
@@ -286,13 +292,14 @@ sub unload
         @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
 
         my @undoc_cmds = $plugin->cmds();
-        @undoc_cmd_list = Util::remove_matches(\@undoc_cmd_list, \@cmds);
+        @undoc_cmd_list = Util::remove_matches(\@undoc_cmd_list, \@undoc_cmds);
 
         my @admin_cmds = $plugin->cmds();
-        @admin_cmd_list = Util::remove_matches(\@admin_cmd_list, \@cmds);
+        @admin_cmd_list = Util::remove_matches(\@admin_cmd_list, \@admin_cmds);
 
         $plugin->unload();
         delete $plugins->{$file};
+
         $lock->up();
 
         return "$name unloaded.";

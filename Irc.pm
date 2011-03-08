@@ -138,7 +138,7 @@ my $match_irc_msg =
         )?              # prefix isn't mandatory
         (\S+)           # (2) cmd
         \s
-        (.+)            # (3) parameters
+        (.+?)           # (3) parameters
         \r?             # irc standard includes carriage return which we don't want
         $
     /x;
@@ -507,6 +507,9 @@ sub process_admin_cmd
         my $msg = "Admin commands: " . join(", ", Plugin::admin_cmds());
         send_privmsg ($target, $msg);
     }
+    elsif ($cmd eq "update") {
+        my $remote = "";
+    }
     elsif ($cmd eq "load") {
         my @list = split (/ /, $arg);
         for my $plugin (@list) {
@@ -535,6 +538,7 @@ sub process_admin_cmd
     }
     elsif ($cmd eq "reload") {
         my @list = split (/ /, $arg);
+
         for my $plugin (@list) {
             my $msg = Plugin::reload ($plugin);
             send_privmsg ($target, $msg);
