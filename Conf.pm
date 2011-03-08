@@ -28,6 +28,7 @@ our @admins = ('Mowah');
 
 our $plugin_folder = "plugin/";
 
+# Used to filter out unnecessary stuff
 our @log_blacklist = (
     # Ping pong is interesting to play but not to watch
     qr/^. PING/,
@@ -38,6 +39,13 @@ our @log_blacklist = (
 
     # Dunno about this, seems not very useful - and large
     qr/^< \S+ 005/,
+);
+
+# Used to only show bare essentials
+our @log_whitelist = (
+    qr/PRIVMSG/,
+    qr/JOIN|PART|QUIT/,
+    qr/^[!*]/,
 );
 
 1;

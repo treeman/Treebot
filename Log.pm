@@ -12,12 +12,15 @@ use Conf;
 my $fh;
 my $file_name;
 
+# Logging options
 my $log_verbose;
 my $verbose;
+my $bare;
+my $show_bare;
 
 sub init
 {
-    ($verbose, $log_verbose) = @_;
+    ($verbose, $log_verbose, $bare, $show_bare) = @_;
     open_log_file();
 
     # Log warnings
@@ -40,23 +43,63 @@ sub store
     chomp $msg;
 
     my $blacklisted = blacklisted ($msg);
+    my $whitelisted = whitelisted ($msg);
 
-    if ($verbose or !$blacklisted) {
+    if ($bare or $show_bare) {
+        if ($whitelisted) {
+            say $msg;
+        }
+    }
+    elsif ($verbose) {
         say $msg;
     }
-    if ($verbose or $log_verbose or !$blacklisted) {
-
-        if ($file_name ne file_name()) {
-            open_log_file();
-        }
-        say $fh $msg;
+    elsif (!$blacklisted) {
+        say $msg;
     }
+
+    if ($bare) {
+        if ($whitelisted) {
+            output ($msg);
+        }
+    }
+    elsif ($verbose or $log_verbose) {
+        output ($msg);
+    }
+    elsif (!$blacklisted) {
+        output ($msg);
+    }
+
+    #if ($bare) {
+        #if ($whitelisted) {
+            #say $msg;
+            #output ($msg);
+        #}
+    #}
+    #else {
+        #if ($verbose or !$blacklisted) {
+            #say $msg;
+        #}
+        #if ($verbose or $log_verbose or !$blacklisted) {
+            #output ($msg);
+        #}
+    #}
+}
+
+sub output
+{
+    my ($msg) = join("", @_);
+    if ($file_name ne file_name()) {
+        open_log_file();
+    }
+    say $fh $msg;
 }
 
 sub file_name
 {
     my @time = localtime();
     my ($year, $month, $day) = @time[5, 4, 3];
+    $month++; # Months start with 0.
+
     $year += 1900;
 
     my $log_dir = $Conf::log_dir;
@@ -75,6 +118,18 @@ sub blacklisted
     my ($msg) = @_;
 
     for (@Conf::log_blacklist) {
+        if ($msg =~ /$_/) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+sub whitelisted
+{
+    my ($msg) = @_;
+
+    for (@Conf::log_whitelist) {
         if ($msg =~ /$_/) {
             return 1;
         }

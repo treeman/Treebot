@@ -222,7 +222,7 @@ sub load_file
         return "Oops $file seems to have some errors in it.";
     }
 
-    use $file;
+    require $file;
 
     if (!$name->can('new')){
         Log::error "$name doesn't have a new method, not a valid Moose class.";
