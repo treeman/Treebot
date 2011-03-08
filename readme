@@ -1,6 +1,4 @@
 ﻿# Todo
-*Refactor the log, maybe different filtering. Consider finding a cpan repo for it.
-    I'm scattering too many "say" here and there, should be able to log it instead
 *Better return handling for plugin handling
     For _all commands return how many plugins were affected
     Log error if something bad happens and better returning messages

@@ -1,11 +1,12 @@
 #!/usr/bin/perl -w
 
 use Modern::Perl;
-use MooseX::Declare;
-use Test::More;
 
 use threads;
 use Thread::Queue;
+
+use MooseX::Declare;
+use Test::More;
 use Getopt::Long;
 
 use Log;
@@ -18,6 +19,8 @@ my $run_tests;      # Run tests
 my $verbose;        # Verbose output, both log and stdout
 my $log_verbose;    # Verbose logging, stdout as usual
 
+my @args = @ARGV;
+
 Getopt::Long::Configure ("bundling");
 GetOptions('test|t' => \$test,
            'runtests' => \$run_tests,
@@ -27,6 +30,19 @@ GetOptions('test|t' => \$test,
 
 # register SIGINT failure for cleanup
 $SIG{INT} = \&quit;
+
+Log::init ($verbose, $log_verbose);
+Log::exe ("Starting");
+
+if ($run_tests) {
+    Irc::run_tests();
+}
+else {
+    Irc::init ($dry, $test);
+    Irc::start;
+}
+
+quit();
 
 sub quit
 {
@@ -41,18 +57,31 @@ sub quit
     if ($run_tests) {
         done_testing();
     }
+
+    Log::exe ("Quitting");
     exit;
 }
 
-Log::init($verbose, $log_verbose);
+$SIG{CHLD} = "IGNORE";
 
-if ($run_tests) {
-    Irc::run_tests();
-}
-else {
-    Irc::init ($dry, $test);
-    Irc::start;
-}
+sub restart
+{
+    Irc::quit ("Restarting...");
 
-quit;
+    for my $thr (threads->list()) {
+        $thr->detach();
+    }
+
+    Plugin::unload_all();
+
+    if ($run_tests) {
+        done_testing();
+    }
+
+    Log::exe ("Restarting");
+
+    sleep 2;
+
+    exec ('Treebot.pl', @args);
+}
 

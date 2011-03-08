@@ -31,6 +31,7 @@ sub recieved { store ("< ", @_); }
 sub sent { store ("> ", @_); }
 sub plugin { store ("~ ", @_); }
 sub file { store ("\$ ", @_); }
+sub exe { store ("* ", @_); }
 sub it { store ("? ", @_); }
 
 sub store

@@ -3,14 +3,15 @@
 package Irc;
 
 use Modern::Perl;
-use MooseX::Declare;
-use IO::Socket;
-use Carp;
-use Test::More;
 
 use threads;
 use threads::shared;
 use Thread::Semaphore;
+
+use MooseX::Declare;
+use IO::Socket;
+use Carp;
+use Test::More;
 
 use Plugin;
 use Log;
@@ -498,6 +499,9 @@ sub process_admin_cmd
 
     if ($cmd eq "quit") {
         main::quit ($arg);
+    }
+    elsif ($cmd eq "restart") {
+        main::restart ();
     }
     elsif ($cmd =~ /^admin_?cmds$/) {
         my $msg = "Admin commands: " . join(", ", Plugin::admin_cmds());

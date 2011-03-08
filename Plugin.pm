@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -w
 
 use Modern::Perl;
 use MooseX::Declare;
@@ -46,6 +46,9 @@ class DefaultPlugin with Plugin
 
     # Should return a help message for every command the module defines
     method cmd_help { return ""; }
+
+    # Place your tests here
+    method run_tests { }
 }
 
 package Plugin;
@@ -219,7 +222,7 @@ sub load_file
         return "Oops $file seems to have some errors in it.";
     }
 
-    require $file;
+    use $file;
 
     if (!$name->can('new')){
         Log::error "$name doesn't have a new method, not a valid Moose class.";

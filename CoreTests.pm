@@ -3,12 +3,13 @@
 package CoreTests;
 
 use Modern::Perl;
-use Test::More;
-use Carp;
 
 use threads;
 use threads::shared;
 use Thread::Queue;
+
+use Test::More;
+use Carp;
 
 use Plugin;
 
@@ -24,6 +25,8 @@ sub run_tests
     sleep 1;
 
     ok(Irc::has_connected(), "Test connection");
+
+    #Plugin::run_tests();
 }
 
 # Need to figure out a nice way to check events after we sent something
