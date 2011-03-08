@@ -80,6 +80,7 @@ sub restart
 
     Log::exe ("Restarting");
 
+    # We need to wait a bit so we don't throttle the poor server
     sleep 2;
 
     exec ('Treebot.pl', @args);
