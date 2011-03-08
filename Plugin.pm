@@ -1,13 +1,13 @@
 #!/usr/bin/perl
 
 use Modern::Perl;
-use Test::More;
-
 use MooseX::Declare;
 
 role Plugin
 {
     requires qw(
+        load
+        unload
         cmds
         undocumented_cmds
         admin_cmds
@@ -17,8 +17,7 @@ role Plugin
         process_irc_msg
         process_bare_msg
         cmd_help
-        load
-        unload );
+        run_tests);
 }
 
 class DefaultPlugin with Plugin
@@ -26,26 +25,26 @@ class DefaultPlugin with Plugin
     method load { }
     method unload { }
 
-    # return list of commands the plugin listens to
+    # Return list of commands the plugin listens to
     method cmds { return (); }
     method undocumented_cmds { return (); }
     method admin_cmds { return (); }
 
-    # sender, target, cmd, args
+    # Sender, target, cmd, args
     method process_cmd { }
     method process_admin_cmd { }
 
-    # sender, target, msg
+    # Sender, target, msg
     method process_privmsg { }
 
-    # a standard irc message
-    # prefix, command, parameters (the rest)
+    # A standard irc message
+    # Prefix, command, parameters (the rest)
     method process_irc_msg { }
 
-    # whole recieved irc message
+    # Whole recieved irc message
     method process_bare_msg { }
 
-    # should return a help message for every command the module defines
+    # Should return a help message for every command the module defines
     method cmd_help { return ""; }
 }
 
@@ -82,15 +81,18 @@ sub process_bare_msg;
 
 sub get_cmd_help;
 
+sub run_tests;
+
 # shared reference to our plugins
 my $plugins :shared;
 my %real_plugins;
 $plugins = share(%real_plugins);
-my $plugin_lock = Thread::Semaphore->new();
 
 my @cmd_list :shared;
 my @undoc_cmd_list :shared;
 my @admin_cmd_list :shared;
+
+my $lock = Thread::Semaphore->new();
 
 sub resolve_filepath
 {
@@ -153,17 +155,17 @@ sub load_all
     }
     closedir(DIR);
 
-    $plugin_lock->down();
+    $lock->down();
     push (@cmd_list, "cmds");
     push (@cmd_list, "help");
 
     push (@admin_cmd_list, "admin_cmds");
-    $plugin_lock->up();
+    $lock->up();
 }
 
 sub unload_all
 {
-    $plugin_lock->down();
+    $lock->down();
 
     while (my ($name, $plugin) = (each %{$plugins}))
     {
@@ -176,7 +178,7 @@ sub unload_all
         $plugin->unload();
         delete $plugins->{$name};
     }
-    $plugin_lock->up();
+    $lock->up();
 }
 
 sub reload_all
@@ -232,7 +234,7 @@ sub load_file
 
     Log::plugin "Loading $file";
 
-    $plugin_lock->down();
+    $lock->down();
 
     $plugins->{$file} = share($plugin);
     $plugin->load();
@@ -262,7 +264,7 @@ sub load_file
     @undoc_cmd_list = sort (@undoc_cmd_list);
     @admin_cmd_list = sort (@admin_cmd_list);
 
-    $plugin_lock->up();
+    $lock->up();
 
     return "$name loaded.";
 }
@@ -271,7 +273,7 @@ sub unload
     my ($name) = @_;
     my $file = resolve_filepath ($name);
 
-    $plugin_lock->down();
+    $lock->down();
     if (defined ($plugins->{$file})) {
         Log::plugin "Unloading $file";
 
@@ -288,7 +290,7 @@ sub unload
 
         $plugin->unload();
         delete $plugins->{$file};
-        $plugin_lock->up();
+        $lock->up();
 
         return "$name unloaded.";
     }
@@ -323,61 +325,61 @@ sub admin_cmds
 
 sub process_cmd
 {
-    $plugin_lock->down();
+    $lock->down();
     for my $plugin (values %{$plugins})
     {
         $plugin->process_cmd (@_);
     }
-    $plugin_lock->up();
+    $lock->up();
 }
 
 sub process_admin_cmd
 {
     my ($sender, $target, $cmd, $arg) = @_;
 
-    $plugin_lock->down();
+    $lock->down();
     for my $plugin (values %{$plugins})
     {
         $plugin->process_admin_cmd ($sender, $target, $cmd, $arg);
     }
-    $plugin_lock->up();
+    $lock->up();
 }
 
 sub process_privmsg
 {
-    $plugin_lock->down();
+    $lock->down();
     for my $plugin (values %{$plugins})
     {
         $plugin->process_privmsg (@_);
     }
-    $plugin_lock->up();
+    $lock->up();
 }
 
 sub process_irc_msg
 {
-    $plugin_lock->down();
+    $lock->down();
     for my $plugin (values %{$plugins})
     {
         $plugin->process_irc_msg (@_);
     }
-    $plugin_lock->up();
+    $lock->up();
 }
 
 sub process_bare_msg
 {
-    $plugin_lock->down();
+    $lock->down();
     for my $plugin (values %{$plugins})
     {
         $plugin->process_bare_msg (@_);
     }
-    $plugin_lock->up();
+    $lock->up();
 }
 
 sub get_cmd_help
 {
     my @help;
 
-    $plugin_lock->down();
+    $lock->down();
     for my $plugin (values %{$plugins})
     {
         my $help = $plugin->cmd_help (@_);
@@ -385,9 +387,19 @@ sub get_cmd_help
             push (@help, $help);
         }
     }
-    $plugin_lock->up();
+    $lock->up();
 
     return @help;
+}
+
+sub run_tests
+{
+    $lock->down();
+    for my $plugin (values %{$plugins})
+    {
+        $plugin->run_tests (@_);
+    }
+    $lock->up();
 }
 
 1;

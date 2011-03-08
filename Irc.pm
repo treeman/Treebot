@@ -6,6 +6,7 @@ use Modern::Perl;
 use MooseX::Declare;
 use IO::Socket;
 use Carp;
+use Test::More;
 
 use threads;
 use threads::shared;
@@ -15,6 +16,7 @@ use Plugin;
 use Log;
 use Conf;
 use Util;
+use CoreTests;
 
 # Create a worker thread and store it in workers
 sub create_cmd_worker;
@@ -27,15 +29,19 @@ sub read_sock;
 # Our sock listening, should start in it's own thread
 sub sock_listener;
 
-# Place message in $in_queue
-sub write_sock;
-# Sends all messages in $in_queue for writing, should be a thread
+# Place message in in_queue
+sub push_in;
+# Place message in out_queue
+sub push_out;
+
+# Sends all messages in out_queue for writing, should be a thread
 sub socket_writer;
 # Lock down socket and write
 sub output_to_sock;
-
-# Logs everything from out_queue
-sub out_redirect;
+# Log everything from out_queue
+sub log_out;
+# Redirect from out_queue to CoreTests::out
+sub test_out;
 
 # Format and send a string to the server
 sub send_msg;
@@ -59,22 +65,33 @@ sub process_cmd;
 # Process an admin command, should be in a non main-thread
 sub process_admin_cmd;
 
-# Main function which connects and waits for events
+# When we get connection confirmed by server we'll set stuff here
+sub connection_successful;
+
+# Init the irc connection
+sub init;
+# Parse events
 sub start;
 # Will get called when we quit, either by SIGINT or regular quit
 sub quit;
-# Helper function to lockdown shared bool
-sub has_connected;
 
 # Irc helper functions
 sub irc_join;
 sub irc_part;
 sub irc_kick;
 
+# Helper function to lockdown shared bool
+sub has_connected;
+
 # Cannot run in the same thread as a listener, will sleep
 sub is_authed;
 sub authed_as;
 sub is_admin;
+
+# Run tests and exit
+sub run_tests;
+# Test stuff private to this file
+sub run_core_tests;
 
 my $sock;
 my $sock_lock = Thread::Semaphore->new(2);
@@ -86,6 +103,11 @@ my $nick_lock = Thread::Semaphore->new();
 
 my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
+
+# Command-line flags
+my $dry :shared;
+my $test :shared;
+my $run_tests :shared;
 
 # Worker threads dispatched for commands
 # Probably should be removed when they're done?
@@ -116,7 +138,7 @@ my $match_irc_msg =
         (\S+)           # (2) cmd
         \s
         (.+)            # (3) parameters
-        \r              # irc standard includes carriage return which we don't want
+        \r?             # irc standard includes carriage return which we don't want
         $
     /x;
 
@@ -134,11 +156,11 @@ sub stdin_listener
         chomp $_;
         if (/^\./) {
             # We've recieved a command, it will be parsed in the $in_queue.
-            $in_queue->enqueue($_);
+            push_in ($_);
         }
         elsif (/^<\s*(.*)/) {
             # Act like we recieve it from the socket
-            $in_queue->enqueue("$1\r\n");
+            push_in ("$1\r\n");
         }
         else {
             # If it's not something special we just pipe it to the server
@@ -170,15 +192,22 @@ sub sock_listener
         if ($input =~ /^\Q$Conf::cmd_prefix\E/) {
             $input = "\\$input";
         }
-        $in_queue->enqueue($input);
+        push_in ($input);
     }
 }
 
-sub write_sock
+sub push_in
 {
-    my ($msg) = @_;
+    for (@_) {
+        $in_queue->enqueue ($_);
+    }
+}
 
-    $out_queue->enqueue ($msg);
+sub push_out
+{
+    for (@_) {
+        $out_queue->enqueue ($_);
+    }
 }
 
 sub socket_writer
@@ -199,7 +228,7 @@ sub output_to_sock
     if (defined($sock)) {
         $sock_lock->down();
             print $sock "$msg\r\n";
-            Log::sent($msg);
+            Log::sent ($msg);
         $sock_lock->up();
     }
     else {
@@ -207,11 +236,19 @@ sub output_to_sock
     }
 }
 
-sub out_redirect
+sub log_out
 {
     while(my $msg = $out_queue->dequeue()) {
         chomp $msg;
-        Log::sent($msg);
+        Log::sent ($msg);
+    }
+}
+
+sub test_out
+{
+    while(my $msg = $out_queue->dequeue()) {
+        chomp $msg;
+        CoreTests::out ($msg);
     }
 }
 
@@ -219,11 +256,11 @@ sub send_msg
 {
     my $msg = join("", @_);
 
-    if (length($msg) > 0 ) {
-        write_sock($msg);
+    if (length ($msg) > 0 ) {
+        push_out ($msg);
     }
     else {
-        Log::error("trying to send an empty message.");
+        Log::error "trying to send an empty message.";
     }
 }
 
@@ -236,7 +273,7 @@ sub send_privmsg
         Log::out $msg;
     }
     else {
-        send_msg ("PRIVMSG $target :$msg");
+        send_msg "PRIVMSG $target :$msg";
     }
 }
 
@@ -287,23 +324,7 @@ sub parse_pre_login_recieved
         # Check the numerical responses from the server.
         if ($code =~ /004/) {
             # We managed to login, yay!
-            has_connected(1);
-
-            # Actually load all plugins.
-            Plugin::load_all();
-
-            # We are now logged in, so join.
-            irc_join @Conf::channels;
-
-            # Register our nick if we're on quakenet
-            if ($Conf::server =~ /quakenet/) {
-                open my $fh, '<', "Q-pass";
-                my $pass = <$fh>;
-                chomp $pass;
-                send_privmsg
-                    'Q@CServe.quakenet.org',
-                    "AUTH $Conf::nick $pass";
-            }
+            connection_successful;
         }
         # Nickname in use
         elsif ($code =~ /433/) {
@@ -530,14 +551,69 @@ sub process_admin_cmd
     }
 }
 
-sub start
+sub connection_successful
 {
-    my ($dry, $test) = @_;
+    # We managed to login, yay!
+    has_connected(1);
+
+    Plugin::load_all();
 
     if (!$test) {
+        # We are now logged in, so join.
+        irc_join @Conf::channels;
+
+        # Register our nick if we're on quakenet
+        if ($Conf::server =~ /quakenet/) {
+            open my $fh, '<', "Q-pass";
+            my $pass = <$fh>;
+            chomp $pass;
+            send_privmsg
+                'Q@CServe.quakenet.org',
+                "AUTH $Conf::nick $pass";
+        }
+    }
+
+    # Run plugin tests in main thread
+    if ($run_tests) {
+        Plugin::run_tests();
+    }
+}
+
+sub init
+{
+    ($dry, $test, $run_tests) = @_;
+
+    if ($dry) {
+        # Pretend to log on to the server
+        send_msg "NICK $Conf::nick";
+        send_msg "USER $Conf::username 0 * :$Conf::realname";
+
+        if ($run_tests) {
+            # Worker who outputs everything from the out_queue to a testing function
+            my $test_out = threads->create(\&CoreTests::out);
+        }
+        else {
+            # Worker who outputs everything from the out_queue to a log
+            my $log_out = threads->create(\&log_out);
+        }
+    }
+    elsif ($test) {
+        if ($run_tests) {
+            # Worker who outputs everything from the out_queue to a testing function
+            my $test_out = threads->create(\&CoreTests::out);
+        }
+        else {
+            # Worker who outputs everything from the out_queue to a log
+            my $log_out = threads->create(\&log_out);
+        }
+
+        # We have "connected"
+        connection_successful;
+    }
+    else {
         my $attempt = 0;
         while (!$sock) {
-            # Connect to the IRC server.
+            # Connect to the IRC server
             $sock = new IO::Socket::INET(PeerAddr => $Conf::server,
                                          PeerPort => $Conf::port,
                                          Proto => 'tcp');
@@ -566,18 +642,13 @@ sub start
         # so we can write to socket from other threads
         my $sock_writer = threads->create(\&socket_writer, $sock);
     }
-    elsif (!$dry) {
-        # Worker who outputs everything from the $out_queue to a log
-        my $out_redirect = threads->create(\&out_redirect);
-
-        # We have "connected"
-        has_connected(1);
-        Plugin::load_all();
-    }
 
     # Worker thread for listening and parsing stdin cmds
     my $stdin_listener = threads->create(\&stdin_listener);
+}
 
+sub start
+{
     while (my $input = $in_queue->dequeue()) {
         chomp $input;
 
@@ -630,17 +701,6 @@ sub quit
     }
 }
 
-sub has_connected
-{
-    my ($new_val) = @_;
-
-    if (defined ($new_val)) {
-        lock($has_connected);
-        $has_connected = $new_val;
-    }
-    return $has_connected;
-}
-
 sub irc_join
 {
     for (@_) {
@@ -661,6 +721,17 @@ sub irc_part
 sub irc_kick
 {
 
+}
+
+sub has_connected
+{
+    my ($new_val) = @_;
+
+    if (defined ($new_val)) {
+        lock($has_connected);
+        $has_connected = $new_val;
+    }
+    return $has_connected;
 }
 
 sub is_authed
@@ -724,6 +795,42 @@ sub is_admin
         $nick_lock->up();
     }
     return 0;
+}
+
+sub run_tests
+{
+    # We want it to behave as normal, but without redirecting the output
+    # so we can parse out_queue in our testing function ourselves
+    my ($dry, $test, $run_tests) = (1, 1, 1);
+
+    # Redirect output to a testing function
+    threads->create(\&test_out);
+
+    init ($dry, $test, $run_tests);
+
+    run_core_tests();
+
+    # Tests thread
+    threads->create(\&CoreTests::run_tests);
+
+    # Start our parsing
+    start;
+}
+
+sub run_core_tests
+{
+    like(".cmd", $match_cmd, "simple command");
+    like(".cmd arg", $match_cmd, "arg command");
+    like(".cmd arg1 arg2", $match_cmd, "args command");
+    unlike("cmd", $match_cmd, "bare command");
+
+    like(":server12_232:d2 CODEZ0R #pew#!\"# arg1 arg2 :last", $match_irc_msg, "irc msg args");
+    like(":server IPP treebot :l", $match_irc_msg, "simple");
+    like("PING :pew", $match_irc_msg, "ping");
+    like("NOTICE banener :äter oss", $match_irc_msg, "notice");
+    unlike("err", $match_irc_msg, "juse one thingie");
+
+    like("PING :pew", $match_ping, "match ping");
 }
 
 1;

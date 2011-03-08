@@ -18,6 +18,7 @@ my $run_tests;      # Run tests
 my $verbose;        # Verbose output, both log and stdout
 my $log_verbose;    # Verbose logging, stdout as usual
 
+Getopt::Long::Configure ("bundling");
 GetOptions('test|t' => \$test,
            'runtests' => \$run_tests,
            'dry|d' => \$dry,
@@ -36,10 +37,22 @@ sub quit
     }
 
     Plugin::unload_all();
+
+    if ($run_tests) {
+        done_testing();
+    }
     exit;
 }
 
 Log::init($verbose, $log_verbose);
 
-Irc::start($dry, $test);
+if ($run_tests) {
+    Irc::run_tests();
+}
+else {
+    Irc::init ($dry, $test);
+    Irc::start;
+}
+
+quit;
 

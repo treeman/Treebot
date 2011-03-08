@@ -16,6 +16,9 @@
 
 # Bugs
 *^C hangs on stdin getline, quits after enter (only sometimes?)
+*Plugin::run_tests couldn't be run from a different thread (CoreTests::run_tests)
+    My solution was to run the tests from the main thread
+    It's strange because threaded cmd_workers can use Plugin functions just fine
 
 # Implemented
 *admin
