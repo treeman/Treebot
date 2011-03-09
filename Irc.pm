@@ -17,7 +17,7 @@ use Plugin;
 use Log;
 use Conf;
 use Util;
-use CoreTests;
+use Tests;
 
 # Create a worker thread and store it in workers
 sub create_cmd_worker;
@@ -41,7 +41,7 @@ sub socket_writer;
 sub output_to_sock;
 # Log everything from out_queue
 sub log_out;
-# Redirect from out_queue to CoreTests::out
+# Redirect from out_queue to Tests::out
 sub test_out;
 
 # Format and send a string to the server
@@ -89,6 +89,11 @@ sub is_authed;
 sub authed_as;
 sub is_admin;
 
+# List commands
+sub cmds;
+sub undoc_cmds;
+sub admin_cmds;
+
 # Run tests and exit
 sub run_tests;
 # Test stuff private to this file
@@ -109,6 +114,24 @@ my $out_queue = Thread::Queue->new();
 my $dry :shared;
 my $test :shared;
 my $run_tests :shared;
+
+# Commands we can't implement in plugins
+my @core_cmds = ('cmds',
+                 'help');
+my @core_undoc_cmds = ();
+my @core_admin_cmds = ('admin_cmds',
+                       'available',
+                       'load',
+                       'load_all',
+                       'loaded',
+                       'quit',
+                       'reload',
+                       'reload_all',
+                       'restart',
+                       'unload',
+                       'unload_all',
+                       'update',
+                      );
 
 # Worker threads dispatched for commands
 # Probably should be removed when they're done?
@@ -249,7 +272,7 @@ sub test_out
 {
     while(my $msg = $out_queue->dequeue()) {
         chomp $msg;
-        CoreTests::out ($msg);
+        Tests::out ($msg);
     }
 }
 
@@ -469,11 +492,11 @@ sub process_cmd
         }
     }
     elsif ($cmd =~ /^cmds|commands$/) {
-        my $msg = "Documented commands: " . join(", ", Plugin::cmds());
+        my $msg = "Documented commands: " . join(", ", cmds());
         Irc::send_privmsg ($target, $msg);
     }
     elsif ($cmd =~ /undocumented_?cmds|undoc/) {
-        my $msg = "Undocumented commands: " . join(", ", Plugin::undoc_cmds());
+        my $msg = "Undocumented commands: " . join(", ", undoc_cmds());
         Irc::send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "recheck") {
@@ -504,7 +527,7 @@ sub process_admin_cmd
         main::restart ();
     }
     elsif ($cmd =~ /^admin_?cmds$/) {
-        my $msg = "Admin commands: " . join(", ", Plugin::admin_cmds());
+        my $msg = "Admin commands: " . join(", ", admin_cmds());
         send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "update") {
@@ -598,7 +621,7 @@ sub init
 
         if ($run_tests) {
             # Worker who outputs everything from the out_queue to a testing function
-            my $test_out = threads->create(\&CoreTests::out);
+            my $test_out = threads->create(\&Tests::out);
         }
         else {
             # Worker who outputs everything from the out_queue to a log
@@ -608,7 +631,7 @@ sub init
     elsif ($test) {
         if ($run_tests) {
             # Worker who outputs everything from the out_queue to a testing function
-            my $test_out = threads->create(\&CoreTests::out);
+            my $test_out = threads->create(\&Tests::out);
         }
         else {
             # Worker who outputs everything from the out_queue to a log
@@ -805,6 +828,31 @@ sub is_admin
     return 0;
 }
 
+sub cmds
+{
+    my %cmds = Plugin::cmds();
+    for (@core_cmds) {
+        $cmds{$_} = 1;
+    }
+    return sort keys %cmds;
+}
+sub undoc_cmds
+{
+    my %cmds = Plugin::undoc_cmds();
+    for (@core_undoc_cmds) {
+        $cmds{$_} = 1;
+    }
+    return sort keys %cmds;
+}
+sub admin_cmds
+{
+    my %cmds = Plugin::admin_cmds();
+    for (@core_admin_cmds) {
+        $cmds{$_} = 1;
+    }
+    return sort keys %cmds;
+}
+
 sub run_tests
 {
     # We want it to behave as normal, but without redirecting the output
@@ -819,7 +867,7 @@ sub run_tests
     run_core_tests();
 
     # Tests thread
-    threads->create(\&CoreTests::run_tests);
+    threads->create(\&Tests::run_tests);
 
     # Start our parsing
     start;

@@ -12,6 +12,7 @@ use Getopt::Long;
 use Log;
 use Irc;
 use Plugin;
+use Tests;
 
 my $dry;            # Don't connect at all
 my $test;           # Run in test mode. Implies dry but connects directly

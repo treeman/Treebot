@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-package CoreTests;
+package Tests;
 
 use Modern::Perl;
 

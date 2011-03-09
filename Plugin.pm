@@ -91,9 +91,9 @@ my $plugins :shared;
 my %real_plugins;
 $plugins = share(%real_plugins);
 
-my @cmd_list :shared;
-my @undoc_cmd_list :shared;
-my @admin_cmd_list :shared;
+my %cmd_list :shared;
+my %undoc_cmd_list :shared;
+my %admin_cmd_list :shared;
 
 my $lock = Thread::Semaphore->new();
 
@@ -159,10 +159,7 @@ sub load_all
     closedir(DIR);
 
     $lock->down();
-    push (@cmd_list, "cmds");
-    push (@cmd_list, "help");
 
-    push (@admin_cmd_list, "admin_cmds");
     $lock->up();
 }
 
@@ -176,13 +173,13 @@ sub unload_all
         Log::plugin "Unloading $file";
 
         my @cmds = $plugin->cmds();
-        @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
+        %cmd_list = Util::remove_matches(\%cmd_list, \@cmds);
 
         my @undoc_cmds = $plugin->cmds();
-        @undoc_cmd_list = Util::remove_matches(\@undoc_cmd_list, \@undoc_cmds);
+        %undoc_cmd_list = Util::remove_matches(\%undoc_cmd_list, \@undoc_cmds);
 
         my @admin_cmds = $plugin->cmds();
-        @admin_cmd_list = Util::remove_matches(\@admin_cmd_list, \@admin_cmds);
+        %admin_cmd_list = Util::remove_matches(\%admin_cmd_list, \@admin_cmds);
 
         $plugin->unload();
         delete $plugins->{$name};
@@ -251,27 +248,23 @@ sub load_file
     my @cmds = $plugin->cmds();
     for my $cmd (@cmds) {
         if ($cmd) {
-            push (@cmd_list, $cmd);
+            $cmd_list{$cmd} = 1;
         }
     }
 
     my @undoc_cmds = $plugin->undocumented_cmds();
     for my $cmd (@undoc_cmds) {
         if ($cmd) {
-            push (@undoc_cmd_list, $cmd);
+            $undoc_cmd_list{$cmd} = 1;
         }
     }
 
     my @admin_cmds = $plugin->admin_cmds();
     for my $cmd (@admin_cmds) {
         if ($cmd) {
-            push (@admin_cmd_list, $cmd);
+            $admin_cmd_list{$cmd} = 1;
         }
     }
-
-    @cmd_list = sort (@cmd_list);
-    @undoc_cmd_list = sort (@undoc_cmd_list);
-    @admin_cmd_list = sort (@admin_cmd_list);
 
     $lock->up();
 
@@ -289,13 +282,13 @@ sub unload
         my $plugin = $plugins->{$file};
 
         my @cmds = $plugin->cmds();
-        @cmd_list = Util::remove_matches(\@cmd_list, \@cmds);
+        %cmd_list = Util::remove_matches(\%cmd_list, \@cmds);
 
         my @undoc_cmds = $plugin->cmds();
-        @undoc_cmd_list = Util::remove_matches(\@undoc_cmd_list, \@undoc_cmds);
+        %undoc_cmd_list = Util::remove_matches(\%undoc_cmd_list, \@undoc_cmds);
 
         my @admin_cmds = $plugin->cmds();
-        @admin_cmd_list = Util::remove_matches(\@admin_cmd_list, \@admin_cmds);
+        %admin_cmd_list = Util::remove_matches(\%admin_cmd_list, \@admin_cmds);
 
         $plugin->unload();
         delete $plugins->{$file};
@@ -320,17 +313,26 @@ sub reload
 
 sub cmds
 {
-    return @cmd_list;
+    $lock->down();
+    my %l = %cmd_list;
+    $lock->up();
+    return %l;
 }
 
 sub undoc_cmds
 {
-    return @undoc_cmd_list;
+    $lock->down();
+    my %l = %undoc_cmd_list;
+    $lock->up();
+    return %l;
 }
 
 sub admin_cmds
 {
-    return @admin_cmd_list;
+    $lock->down();
+    my %l = %admin_cmd_list;
+    $lock->up();
+    return %l;
 }
 
 sub process_cmd
