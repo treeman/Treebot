@@ -94,10 +94,14 @@ sub cmds;
 sub undoc_cmds;
 sub admin_cmds;
 
+# Pull from our origin to update source files and either restart or reload plugins
+sub update_src;
+
 # Run tests and exit
 sub run_tests;
 # Test stuff private to this file
-sub run_core_tests;
+sub run_pre_login_tests;
+sub run_post_login_tests;
 
 my $sock;
 my $sock_lock = Thread::Semaphore->new(2);
@@ -348,7 +352,7 @@ sub parse_pre_login_recieved
         # Check the numerical responses from the server.
         if ($code =~ /004/) {
             # We managed to login, yay!
-            connection_successful;
+            connection_successful();
         }
         # Nickname in use
         elsif ($code =~ /433/) {
@@ -531,7 +535,7 @@ sub process_admin_cmd
         send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "update") {
-        my $remote = "";
+        update_src ($target);
     }
     elsif ($cmd eq "load") {
         my @list = split (/ /, $arg);
@@ -604,9 +608,8 @@ sub connection_successful
         }
     }
 
-    # Run plugin tests in main thread
-    if ($run_tests) {
-        Plugin::run_tests();
+    if($run_tests) {
+        run_post_login_tests();
     }
 }
 
@@ -853,6 +856,128 @@ sub admin_cmds
     return sort keys %cmds;
 }
 
+sub update_src
+{
+    my ($target) = @_;
+
+    my $remote = "forest";
+    my $branch = "master";
+
+    my $response = `git pull $remote $branch`;
+
+    update_from_git_pull ($response, $target);
+}
+
+sub update_from_git_pull
+{
+    my ($response, $target) = @_;
+
+    if ($response =~ /Already up-to-date\./) {
+        send_privmsg ($target, "Already up to date.");
+    }
+    else {
+        my @lines = split(/\r\n|\r|\n/, $response);
+
+        # Skip to files changed
+        while (defined (my $line = shift @lines)) {
+            if ($line =~ /fast.forward/i) {
+                last;
+            }
+        }
+
+        my @files_changed;
+
+        while (defined (my $line = shift @lines)) {
+            if ($line =~ /(\S+)\s+\|/) {
+                push (@files_changed, $1);
+            }
+            else {
+                last;
+            }
+        }
+
+        my $msg =  "Files changed: " . join (", ", @files_changed);
+        send_privmsg ($target, $msg);
+
+        my $total_restart = 0;
+        my $reload_all = 0;
+
+        my @plugins_affected;
+        my @subfolders;
+
+        my $pf = $Conf::plugin_folder;
+        my %harmless = %Conf::ignore_on_update;
+
+        for (@files_changed) {
+            if ($harmless{$_}) {
+                next;
+            }
+            elsif (!/^$pf/) {
+                $total_restart = 1;
+                last;
+            }
+            elsif (/^$pf([^\/]+)\.pm$/) {
+                push (@plugins_affected, $1);
+            }
+            elsif (/^$pf([^\/]+)\/.+/) {
+                push (@subfolders, $1);
+            }
+            else {
+                # Random file in plugin directory
+                $reload_all = 1;
+            }
+        }
+
+        if ($total_restart) {
+            send_privmsg ($target, "We need a total restart here.");
+            if (!$run_tests) {
+                main::restart();
+            }
+            return;
+        }
+
+        if ($reload_all) {
+            send_privmsg ($target, "We need to reload all plugins.");
+            if (!$run_tests) {
+                Plugin::reload_all();
+            }
+            return;
+        }
+
+        if (scalar @subfolders) {
+            my @plugins = Plugin::available();
+
+            for my $sub (@subfolders) {
+                my $match_found = 0;
+                for my $p (@plugins) {
+                    if ($sub =~ /\E$p\Q/i) {
+                        push (@plugins_affected, $p);
+                        $match_found = 1;
+                    }
+                }
+
+                if (!$match_found) {
+                    send_privmsg ($target, "We need to reload all plugins.");
+                    if (!$run_tests) {
+                        Plugin::reload_all();
+                    }
+                    return;
+                }
+            }
+        }
+
+        for (@plugins_affected) {
+            if (!$run_tests) {
+                my $msg = Plugin::reload ($_);
+                send_privmsg ($target, $msg);
+            }
+            else {
+                send_privmsg ($target, "Reloading '$_'");
+            }
+        }
+    }
+}
+
 sub run_tests
 {
     # We want it to behave as normal, but without redirecting the output
@@ -864,7 +989,7 @@ sub run_tests
 
     init ($dry, $test, $run_tests);
 
-    run_core_tests();
+    run_pre_login_tests();
 
     # Tests thread
     threads->create(\&Tests::run_tests);
@@ -873,20 +998,77 @@ sub run_tests
     start;
 }
 
-sub run_core_tests
+sub run_pre_login_tests
 {
+    # Run plugin tests in main thread
+    if ($run_tests) {
+        Plugin::run_tests();
+    }
+
     like(".cmd", $match_cmd, "simple command");
     like(".cmd arg", $match_cmd, "arg command");
     like(".cmd arg1 arg2", $match_cmd, "args command");
     unlike("cmd", $match_cmd, "bare command");
 
-    like(":server12_232:d2 CODEZ0R #pew#!\"# arg1 arg2 :last", $match_irc_msg, "irc msg args");
+    like(":ser12_232:d2 CODEZ0R #pe arg1 arg2 :last", $match_irc_msg, "irc msg args");
     like(":server IPP treebot :l", $match_irc_msg, "simple");
     like("PING :pew", $match_irc_msg, "ping");
     like("NOTICE banener :äter oss", $match_irc_msg, "notice");
     unlike("err", $match_irc_msg, "juse one thingie");
 
     like("PING :pew", $match_ping, "match ping");
+}
+
+sub run_post_login_tests
+{
+    test_update_src();
+}
+
+sub test_update_src
+{
+    my @tests = (
+        "Fast-forward
+        plugin/Insults/Admin.pm |  183 -----------------------------------------------
+        plugin/Admin.pm |  183 ---------------------------------------------------
+        plugin/Down.pm |  183 ---------------------------------------------------
+        readme | pew
+        ideas | ladida
+        3 files changed, 108 insertions(+), 206 deletions(-)
+        delete mode 100644 test_cube_match.adb",
+
+        "Fast-forward
+        plugin/bajs/crap |  183 ---------------------------------------------------
+        plugin/Admin.pm |  183 ---------------------------------------------------
+        plugin/Down.pm |  183 ---------------------------------------------------
+        3 files changed, 108 insertions(+), 206 deletions(-)
+        delete mode 100644 test_cube_match.adb",
+
+        "Fast-forward
+        plugin/Insults/Admin.pm |  183 -----------------------------------------------
+        plugin/Admin.pm |  183 ---------------------------------------------------
+        core |  183 ---------------------------------------------------
+        3 files changed, 108 insertions(+), 206 deletions(-)
+        delete mode 100644 test_cube_match.adb",
+
+        "Fast-forward
+        plugin/douche |  183 ---------------------------------------------------
+        core |  183 ---------------------------------------------------
+        3 files changed, 108 insertions(+), 206 deletions(-)
+        delete mode 100644 test_cube_match.adb",
+
+        "Fast-forward
+        plugin/douche |  183 ---------------------------------------------------
+        3 files changed, 108 insertions(+), 206 deletions(-)
+        delete mode 100644 test_cube_match.adb",
+
+        "From forest:treebot
+        * branch            master     -> FETCH_HEAD
+        Already up-to-date.",
+    );
+
+    for (@tests) {
+        update_from_git_pull ($_, "");
+    }
 }
 
 1;

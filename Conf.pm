@@ -26,6 +26,7 @@ our $log_pong = 0;
 
 our @admins = ('Mowah');
 
+# Trailing / important
 our $plugin_folder = "plugin/";
 
 # Used to filter out unnecessary stuff
@@ -50,6 +51,17 @@ our @log_whitelist = (
     # Errors and exe stuff
     qr/^[!*]/,
 );
+
+# Files that don't matter if we change when the bot is running
+# So it won't reload after a git pull if they're the only thing changed
+my @harmless_files = (
+    'readme',
+    'ideas',
+);
+our %ignore_on_update;
+for (@harmless_files) {
+    $ignore_on_update{$_} = 1;
+}
 
 1;
 
