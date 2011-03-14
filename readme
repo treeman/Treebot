@@ -32,7 +32,7 @@
     My solution was to run the tests from the main thread
     It's strange because threaded cmd_workers can use Plugin functions just fine
 *.is_auth? <botnick> doesn't work
-*Plugins don't really reload, the classes are just the same. But the files are being reparsed..
+*Plugins don't really reload, the classes are just the same. But the files are being reparsed..!
 
 # Implemented
 *admin
