@@ -867,6 +867,7 @@ sub update_src
 
     # Need to set in config instead
     my $remote = "origin";
+    # This too ;)
     my $branch = "master";
 
     my $response = `git pull $remote $branch`;
