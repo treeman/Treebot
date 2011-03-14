@@ -865,6 +865,7 @@ sub update_src
 {
     my ($target) = @_;
 
+    # Need to set in config instead
     my $remote = "origin";
     my $branch = "master";
 
