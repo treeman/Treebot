@@ -945,7 +945,7 @@ sub update_from_git_pull
             send_privmsg ($target, "We're looking like Windows updating here, brb.");
             if (!$run_tests) {
                 say "Restart needed!";
-                #main::restart();
+                main::restart();
             }
 #            return;
         }
