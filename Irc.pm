@@ -865,7 +865,7 @@ sub update_src
 {
     my ($target) = @_;
 
-    my $remote = "forest";
+    my $remote = "origin";
     my $branch = "master";
 
     my $response = `git pull $remote $branch`;
