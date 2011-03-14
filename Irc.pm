@@ -870,6 +870,8 @@ sub update_src
 
     my $response = `git pull $remote $branch`;
 
+    say $response;
+
     update_from_git_pull ($response, $target);
 }
 
@@ -941,7 +943,8 @@ sub update_from_git_pull
 #            send_privmsg ($target, "We need a total restart here.");
             send_privmsg ($target, "We're looking like Windows updating here, brb.");
             if (!$run_tests) {
-                main::restart();
+                say "Restart needed!";
+                #main::restart();
             }
 #            return;
         }
@@ -985,7 +988,7 @@ sub update_from_git_pull
 #                send_privmsg ($target, "Reloading '$_'");
 #            }
 #        }
-#    }
+    }
 }
 
 sub run_tests

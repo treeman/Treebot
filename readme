@@ -14,13 +14,6 @@
 -B --show_bare
     Log normally but verbose logging to stdout.
 
-# Dependencies
-Tested with perl 5.10.1, multithreading enabled
-
-Modern::Perl
-MooseX::Declare
-MooseX::Traits
-
 # Todo
 *Better return handling for plugin handling
     For _all commands return how many plugins were affected
