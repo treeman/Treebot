@@ -599,12 +599,17 @@ sub connection_successful
 
         # Register our nick if we're on quakenet
         if ($Conf::server =~ /quakenet/) {
-            open my $fh, '<', "Q-pass";
-            my $pass = <$fh>;
-            chomp $pass;
-            send_privmsg
-                'Q@CServe.quakenet.org',
-                "AUTH $Conf::nick $pass";
+            if (-r "Q-pass") {
+                open my $fh, '<', "Q-pass";
+                my $pass = <$fh>;
+                chomp $pass;
+                send_privmsg
+                    'Q@CServe.quakenet.org',
+                    "AUTH $Conf::nick $pass";
+            }
+            else {
+                Log::error ("No Q-pass file found.");
+            }
         }
     }
 
@@ -899,83 +904,88 @@ sub update_from_git_pull
         my $msg =  "Files changed: " . join (", ", @files_changed);
         send_privmsg ($target, $msg);
 
-        my $total_restart = 0;
-        my $reload_all = 0;
+#        my $total_restart = 0;
+#        my $reload_all = 0;
+        my $mostly_harmless = 1;
 
-        my @plugins_affected;
-        my @subfolders;
+#        my @plugins_affected;
+#        my @subfolders;
 
-        my $pf = $Conf::plugin_folder;
+#        my $pf = $Conf::plugin_folder;
         my %harmless = %Conf::ignore_on_update;
 
         for (@files_changed) {
             if ($harmless{$_}) {
                 next;
             }
-            elsif (!/^$pf/) {
-                $total_restart = 1;
+#            elsif (!/^$pf/) {
+            else {
+#                $total_restart = 1;
+                $mostly_harmless = 0;
                 last;
             }
-            elsif (/^$pf([^\/]+)\.pm$/) {
-                push (@plugins_affected, $1);
-            }
-            elsif (/^$pf([^\/]+)\/.+/) {
-                push (@subfolders, $1);
-            }
-            else {
-                # Random file in plugin directory
-                $reload_all = 1;
-            }
+#            elsif (/^$pf([^\/]+)\.pm$/) {
+#                push (@plugins_affected, $1);
+#            }
+#            elsif (/^$pf([^\/]+)\/.+/) {
+#                push (@subfolders, $1);
+#            }
+#            else {
+#                # Random file in plugin directory
+#                $reload_all = 1;
+#            }
         }
 
-        if ($total_restart) {
-            send_privmsg ($target, "We need a total restart here.");
+#        if ($total_restart) {
+        if (!$mostly_harmless) {
+#            send_privmsg ($target, "We need a total restart here.");
+            send_privmsg ($target, "We're looking like Windows updating here, brb.");
             if (!$run_tests) {
                 main::restart();
             }
-            return;
+#            return;
         }
 
-        if ($reload_all) {
-            send_privmsg ($target, "We need to reload all plugins.");
-            if (!$run_tests) {
-                Plugin::reload_all();
-            }
-            return;
-        }
-
-        if (scalar @subfolders) {
-            my @plugins = Plugin::available();
-
-            for my $sub (@subfolders) {
-                my $match_found = 0;
-                for my $p (@plugins) {
-                    if ($sub =~ /\E$p\Q/i) {
-                        push (@plugins_affected, $p);
-                        $match_found = 1;
-                    }
-                }
-
-                if (!$match_found) {
-                    send_privmsg ($target, "We need to reload all plugins.");
-                    if (!$run_tests) {
-                        Plugin::reload_all();
-                    }
-                    return;
-                }
-            }
-        }
-
-        for (@plugins_affected) {
-            if (!$run_tests) {
-                my $msg = Plugin::reload ($_);
-                send_privmsg ($target, $msg);
-            }
-            else {
-                send_privmsg ($target, "Reloading '$_'");
-            }
-        }
-    }
+#        if ($reload_all) {
+#            send_privmsg ($target, "We need to reload all plugins.");
+#            if (!$run_tests) {
+#                Plugin::reload_all();
+#            }
+#            return;
+#        }
+#
+#        if (scalar @subfolders) {
+#            my @plugins = Plugin::available();
+#
+#            for my $sub (@subfolders) {
+#                my $match_found = 0;
+#                for my $p (@plugins) {
+#                    if ($sub =~ /\E$p\Q/i) {
+#                        push (@plugins_affected, $p);
+#                        $match_found = 1;
+#                    }
+#                }
+#
+#                if (!$match_found) {
+#                    send_privmsg ($target, "We need to reload all plugins.");
+#                    if (!$run_tests) {
+#                        Plugin::reload_all();
+#                    }
+#                    return;
+#                }
+#            }
+#        }
+#
+#        for (@plugins_affected) {
+#            if (!$run_tests) {
+#                my $msg = Plugin::reload ($_);
+#                send_privmsg ($target, $msg);
+#            }
+#            else {
+#                send_privmsg ($target, "Reloading '$_'");
+#            }
+#        }
+#    }
 }
 
 sub run_tests

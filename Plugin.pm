@@ -102,13 +102,13 @@ my $lock = Thread::Semaphore->new();
 sub resolve_filepath
 {
     my ($name) = @_;
-    my $dir = $Conf::plugin_folder;
+    my $dir = /\E$Conf::plugin_folder\Q/;
     my $file = $name;
 
     if ($file !~ /^.*\.pm$/) {
         $file = $file . ".pm";
     }
-    if ($file !~ /^\E$dir\Q/) {
+    if ($file !~ /^$dir/) {
         $file = $dir . $file;
     }
 
