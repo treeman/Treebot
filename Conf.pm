@@ -27,7 +27,7 @@ our $log_pong = 0;
 our @admins = ('Mowah');
 
 # Trailing / important
-our $plugin_folder = "plugin/";
+our $plugin_folder = "Plugins/";
 
 # Used to filter out unnecessary stuff
 our @log_blacklist = (

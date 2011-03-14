@@ -57,6 +57,8 @@ use threads;
 use threads::shared;
 use Thread::Semaphore;
 
+use Test::More;
+
 sub resolve_filepath;
 
 sub loaded;
@@ -147,11 +149,13 @@ sub available
 
 sub load_all
 {
-    # try to load all files in the plugins folder
-    push (@INC, $Conf::plugin_folder);
-
     my $dirname = $Conf::plugin_folder;
 
+    # Add plugin dir and a subfolder so they won't have to specify them specially
+    push (@INC, $dirname);
+    push (@INC, "${dirname}Functionality");
+
+    # try to load all files in the plugins folder
     opendir(DIR, $dirname) or die "can't open dir $dirname: $!";
     while (defined (my $file = readdir(DIR))) {
         load_file ("$dirname$file");
@@ -225,6 +229,8 @@ sub load_file
         return "Oops $file seems to have some errors in it.";
     }
 
+    # This reparses the file
+    # do $file;
     require $file;
 
     if (!$name->can('new')){

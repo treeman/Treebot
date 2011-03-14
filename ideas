@@ -16,8 +16,6 @@
 *episode
     tv show
 *eval
-*gomtv live -> vlc link
-    juse use the python script for that one
 *git
     lines changed the last day/week/month (extract from git log -p <filename>)
     pull master origin, or others
