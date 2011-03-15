@@ -353,11 +353,11 @@ sub parse_recieved
         Log::error("Peculiar, we couldn't capture the message: ", $msg);
     }
 
-#    if (!shall_freeze()) {
-#        Log::debug "Before bare msg";
-#        Plugin::process_bare_msg ($msg);
-#        Log::debug "After bare msg";
-#    }
+    if (!shall_freeze()) {
+        Log::debug "Before bare msg";
+        Plugin::process_bare_msg ($msg);
+        Log::debug "After bare msg";
+    }
 }
 
 sub parse_pre_login_recieved
@@ -459,12 +459,10 @@ sub process_irc_msg
         }
         $nick_lock->up();
 
-        send_msg "WHOIS $nick";
+        #send_msg "WHOIS $nick";
     }
     elsif ($irc_cmd =~ /353/) {
         $param =~ /= #\S+ :(.*)/;
-
-        say $1;
 
         my @users = split (/ /, $1);
 
@@ -473,7 +471,7 @@ sub process_irc_msg
 
             $nick_lock->down();
             if (!exists($authed_nicks{$nick})) {
-                send_msg "WHOIS $nick";
+                #send_msg "WHOIS $nick";
             }
             $nick_lock->up();
         }
@@ -810,6 +808,18 @@ sub start
             }
             next;
         }
+
+        # If we don't know if the nick is auth or not, we need to check it
+        # freeze until WHOIS returns
+        if (has_connected() && $input =~ /^:(\S+)!~\S* PRIVMSG/) {
+            my $nick = $1;
+
+            if (needs_recheck ($nick)) {
+                send_msg "WHOIS $nick";
+                freeze_until ('318', $input);
+            }
+        }
+
         recieve_msg $input;
 
         # We must respond to PINGs to avoid being disconnected.
@@ -881,7 +891,7 @@ sub needs_recheck
     my ($nick) = @_;
 
     $nick_lock->down();
-    my $need = defined ($authed_nicks{$nick});
+    my $need = !defined ($authed_nicks{$nick});
     $nick_lock->up();
 
     return $need;
@@ -969,7 +979,7 @@ sub is_admin
 
 sub shall_freeze
 {
-    Log::debug "Shall freeze?";
+    #Log::debug "Shall freeze?";
 
     $freeze_lock->down();
     my @cmds_left = keys %freeze_until_code;
@@ -980,12 +990,21 @@ sub shall_freeze
 
 sub freeze_until
 {
-    my ($cmd) = @_;
+    my ($cmd, $msg) = @_;
 
-    Log::debug "Freeze until $cmd";
+    my @what :shared;
 
     $freeze_lock->down();
-    $freeze_until_code{$cmd} = 1;
+
+    if (defined ($freeze_until_code{$cmd})) {
+        @what = (@{$freeze_until_code{$cmd}}, $msg);
+        $freeze_until_code{$cmd} = \@what;
+    }
+    else {
+        @what = ($msg);
+        $freeze_until_code{$cmd} = \@what;
+    }
+
     $freeze_lock->up();
 }
 
@@ -993,9 +1012,18 @@ sub release_freeze
 {
     my ($cmd) = @_;
 
-    Log::debug "Freeze release $cmd";
-
     $freeze_lock->down();
+
+    # Add freezed input into the queue for parsing again
+    if ($freeze_until_code{$cmd}) {
+        for my $msg (@{$freeze_until_code{$cmd}}) {
+            if ($msg) {
+                say $msg;
+                $in_queue->enqueue ($msg);
+            }
+        }
+    }
+
     delete $freeze_until_code{$cmd};
     $freeze_lock->up();
 }
