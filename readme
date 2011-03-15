@@ -18,16 +18,18 @@
 
 # Todo
 *Better return handling for plugin handling
-    For _all commands return how many plugins were affected
+    For "_all" commands return how many plugins were affected
     Log error if something bad happens and better returning messages
     If nothing is loaded show a message
 *Git pull from <somewhere>
     Check if core files have changed or just plugins files, then reload or restart
 *Protect the other shared threadings perhaps? But perhaps they're fine where they are.
 *Refactor hardcoded cmd lists
-*Descriptive readme with command line options and stuff?
 *Change logging level dynamically
-*Need major cleanup at authing checking facility! Hacky random WHOIS messages without checking for duplicate sending. Deadlock not interely solved, it might reappear again outside of plugin cmd parsing (ie trying to bind a JOIN event and checking if the nick is auth and we haven't gotten any info on him). It should send an WHOIS on everyone it sees but it's nott fool proof. Need to clean up and set into nicer functions, might need to freeze and unfreeze on 318 and on specific nick too! Also add to check if nick is online.
+*Working tell
+    Must have a way of checking if a user is online or not
+    Otherwise bind to join
+    Store/Retrieve from file on startup/shutdown
 
 # Bugs
 *^C hangs on stdin getline, quits after enter (only sometimes?)
@@ -36,8 +38,6 @@
     It's strange because threaded cmd_workers can use Plugin functions just fine
 *.is_auth? <botnick> doesn't work
 *Plugins don't really reload, the classes are just the same. But the files are being reparsed..!
-*Plugins deadlock if is_admin/is_auth is called and we doesn't have an entry yet. Then that thread will idle, but with the semaphore locked down. Later in the main loop when we're getting new messages we're trying to send them to plugins and then trying to lock down once again. Here we will freeze and cause a deadlock! Not fixed even if it works sometimes!
-    -- It's sort of fixed, see Todo
 
 # Implemented
 *admin

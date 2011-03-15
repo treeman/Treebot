@@ -5,16 +5,28 @@
 *more command line params
 *more logging control
 *redirect error to logs
+*Pipe
+    Send straight to the server, so we can manipulate treebot across Irc
+*Log to user
+    Ability to send all log messages to me, again so we can work with treebot across Irc
+*Change logging level on the fly
+*Ability to log all errors/crashes (replace die and croak)
+    Actually log -all- warnings and errors
+    Try to restart if we crash
+*If we update something through git and it crashes (syntax errors?)
+    reset --hard <latest-working-commit>
+    and restart
 
 # Commands
 *activity
     how much the bot has been used
 *admin
     auto-op admins if we can
+    kick/bann
+    pipe to server
+    log to user
 *brainfuck
 *day9
-*episode
-    tv show
 *eval
 *git
     lines changed the last day/week/month (extract from git log -p <filename>)
@@ -33,14 +45,32 @@
 *madeoftree
 *manage topic
 *manga
+*pokedex
 *polls
-*sc2 stats
+*prenumeration of events
+    ie. Day9, mangas, animes, twitter, torrent completion (admin) etc..
+    needs 1) Retrieve something
+          2) Compare if it's newer
+    then
+          give to tell when something happens
+
+    only work with authed users?
+    or store it in a temporary nick?
+*server handling
+    uptime
+    ip
+    torrents
+    usage
 *sc2casts
+*sc2ranks
 *slap
 *tell
     tell a user something when he comes online
+*topic
+    Manage topic
 *wiki
 *insult/compliment
+    Monkey Island toplists
 *quotes
     Duke
     Monkey Island
