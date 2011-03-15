@@ -81,7 +81,14 @@ sub quit
 
 sub restart
 {
-    Irc::quit ("Restarting...");
+    my ($msg) = @_;
+
+    if ($msg) {
+        Irc::quit ($msg);
+    }
+    else {
+        Irc::quit ("Restarting...");
+    }
 
     for my $thr (threads->list()) {
         $thr->detach();
