@@ -35,6 +35,7 @@
     It's strange because threaded cmd_workers can use Plugin functions just fine
 *.is_auth? <botnick> doesn't work
 *Plugins don't really reload, the classes are just the same. But the files are being reparsed..!
+*Plugins deadlock if is_admin/is_auth is called and we doesn't have an entry yet. Then that thread will idle, but with the semaphore locked down. Later in the main loop when we're getting new messages we're trying to send them to plugins and then trying to lock down once again. Here we will freeze and cause a deadlock!
 
 # Implemented
 *admin

@@ -89,6 +89,10 @@ sub is_authed;
 sub authed_as;
 sub is_admin;
 
+sub shall_freeze;
+sub freeze_until;
+sub release_freeze;
+
 # List commands
 sub cmds;
 sub undoc_cmds;
@@ -118,6 +122,10 @@ my $out_queue = Thread::Queue->new();
 my $dry :shared;
 my $test :shared;
 my $run_tests :shared;
+
+# Ability to freeze and wait for a response code, ex. wait for a WHOIS to end
+my %freeze_until_code :shared;
+my $freeze_lock = Thread::Semaphore->new();
 
 # Commands we can't implement in plugins
 my @core_cmds = ('cmds',
@@ -314,8 +322,6 @@ sub parse_recieved
 {
     my ($msg) = @_;
 
-    Plugin::process_bare_msg ($msg);
-
     if ($msg =~ $match_irc_msg) {
         my $prefix;
         if (!defined ($1)) {
@@ -331,6 +337,10 @@ sub parse_recieved
     }
     else {
         Log::error("Peculiar, we couldn't capture the message: ", $msg);
+    }
+
+    if (!shall_freeze()) {
+        Plugin::process_bare_msg ($msg);
     }
 }
 
@@ -370,13 +380,10 @@ sub process_irc_msg
 {
     my ($prefix, $irc_cmd, $param) = @_;
 
-    Plugin::process_irc_msg ($prefix, $irc_cmd, $param);
+    # First check for cmds without caring for freeze
 
-    if ($irc_cmd =~ /PRIVMSG/) {
-        process_privmsg ($prefix, $irc_cmd, $param);
-    }
     # Nick is authed
-    elsif ($irc_cmd =~ /330/) {
+    if ($irc_cmd =~ /330/) {
         $param =~ /^\S+\s+(\S+)\s+(\S+)/;
         my $nick = $1;
         my $authed_nick = $2;
@@ -441,6 +448,19 @@ sub process_irc_msg
             $authed_nicks{$old_nick} = undef;
         }
         $nick_lock->up();
+    }
+
+    release_freeze ($irc_cmd);
+
+    if (shall_freeze()) {
+        return;
+    }
+    else {
+        if ($irc_cmd =~ /PRIVMSG/) {
+            process_privmsg ($prefix, $irc_cmd, $param);
+        }
+
+        Plugin::process_irc_msg ($prefix, $irc_cmd, $param);
     }
 }
 
@@ -796,10 +816,12 @@ sub is_authed
         elsif (!$whois_sent) {
             send_msg "WHOIS $nick";
             $whois_sent = 1;
+            freeze_until ('318');
             sleep 1;
         }
         else {
             sleep 1;
+            threads::yield();
         }
     }
 }
@@ -836,6 +858,31 @@ sub is_admin
     return 0;
 }
 
+sub shall_freeze
+{
+    $freeze_lock->down();
+    my @cmds_left = keys %freeze_until_code;
+    $freeze_lock->up();
+
+    return scalar @cmds_left;
+}
+sub freeze_until
+{
+    my ($cmd) = @_;
+
+    $freeze_lock->down();
+    $freeze_until_code{$cmd} = 1;
+    $freeze_lock->up();
+}
+sub release_freeze
+{
+    my ($cmd) = @_;
+
+    $freeze_lock->down();
+    delete $freeze_until_code{$cmd};
+    $freeze_lock->up();
+}
+
 sub cmds
 {
     my %cmds = Plugin::cmds();
@@ -867,12 +914,9 @@ sub update_src
 
     # Need to set in config instead
     my $remote = "origin";
-    # This too ;)
     my $branch = "master";
 
     my $response = `git pull $remote $branch`;
-
-    say $response;
 
     update_from_git_pull ($response, $target);
 }
