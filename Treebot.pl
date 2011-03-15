@@ -24,18 +24,22 @@ my $log_verbose;    # Verbose logging, stdout as usual
 my $bare;           # Only log bare essentials
 my $show_bare;      # Only say the bare essentials
 my $daemonize;      # Start as daemon
+my $debug;          # Log debug messages;
 
 my @args = @ARGV;
 
 Getopt::Long::Configure ("bundling");
-GetOptions('test|t' => \$test,
-           'run_tests' => \$run_tests,
-           'dry' => \$dry,
-           'verbose|v' => \$verbose,
-           'log_verbose' => \$log_verbose,
-           'bare|b' => \$bare,
-           'show_bare|B' => \$show_bare,
-           'daemon|d' => \$daemonize);
+GetOptions(
+    'bare|b' => \$bare,
+    'daemon|d' => \$daemonize,
+    'debug' => \$debug,
+    'dry' => \$dry,
+    'log_verbose' => \$log_verbose,
+    'run_tests' => \$run_tests,
+    'show_bare|B' => \$show_bare,
+    'test|t' => \$test,
+    'verbose|v' => \$verbose,
+);
 
 # register SIGINT failure for cleanup
 $SIG{INT} = \&quit;
@@ -44,7 +48,7 @@ if ($daemonize) {
     daemonize();
 }
 
-Log::init ($verbose, $log_verbose, $bare, $show_bare);
+Log::init ($verbose, $log_verbose, $bare, $show_bare, $debug);
 Log::exe ("Starting");
 
 if ($run_tests) {

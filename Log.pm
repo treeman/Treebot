@@ -17,10 +17,11 @@ my $log_verbose;
 my $verbose;
 my $bare;
 my $show_bare;
+my $debug;
 
 sub init
 {
-    ($verbose, $log_verbose, $bare, $show_bare) = @_;
+    ($verbose, $log_verbose, $bare, $show_bare, $debug) = @_;
     open_log_file();
 
     # Log warnings
@@ -36,6 +37,7 @@ sub plugin { store ("~ ", @_); }
 sub file { store ("\$ ", @_); }
 sub exe { store ("* ", @_); }
 sub it { store ("? ", @_); }
+sub debug { store ("£ ", @_) if $debug; }
 
 sub store
 {
