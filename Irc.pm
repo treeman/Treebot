@@ -69,6 +69,9 @@ sub process_admin_cmd;
 # When we get connection confirmed by server we'll set stuff here
 sub connection_successful;
 
+# Join joinable threads
+sub thread_cleaner;
+
 # Init the irc connection
 sub init;
 # Parse events
@@ -638,6 +641,19 @@ sub connection_successful
     }
 }
 
+sub thread_cleaner
+{
+    while (1) {
+        my @joinable = threads->list(threads::joinable);
+
+        for (@joinable) {
+            $_->join();
+        }
+        threads::yield();
+        sleep 2;
+    }
+}
+
 sub init
 {
     ($dry, $test, $run_tests) = @_;
@@ -704,6 +720,9 @@ sub init
 
     # Worker thread for listening and parsing stdin cmds
     my $stdin_listener = threads->create(\&stdin_listener);
+
+    # Tie up those loose ends
+    my $thread_cleaner = threads->create(\&thread_cleaner);
 }
 
 sub start
