@@ -6,6 +6,7 @@ use Test::More;
 use MooseX::Declare;
 use Plugin;
 use Conf;
+use Util;
 
 use Time::Seconds;
 
@@ -33,7 +34,7 @@ class Stuff extends DefaultPlugin
 
     override admin_cmds
     {
-        return qw(dance);
+        return qw(server_uptime);
     }
 
     override process_cmd ($sender, $target, $cmd, $arg)
@@ -51,9 +52,8 @@ class Stuff extends DefaultPlugin
         elsif ($cmd eq "uptime") {
             my $passed = time() - $self->started();
 
-            my @parts = gmtime($passed);
-            my ($d, $h, $m, $s) = @parts[7, 2, 1, 0];
-            my $msg = "Uptime: ${d}d ${h}h ${m}m ${s}s";
+            my $time = Util::format_time ($passed);
+            my $msg = "Uptime: $time";
 
             Irc::send_privmsg ($target, $msg);
         }
@@ -72,8 +72,14 @@ class Stuff extends DefaultPlugin
 
     override process_admin_cmd ($sender, $target, $cmd, $arg)
     {
-        if ($cmd eq "dance") {
-            Irc::send_privmsg ($target, "Imma dancin!");
+        if ($cmd eq "server_uptime") {
+            my $txt = `cat /proc/uptime`;
+            if ($txt =~ /^(\d+\.\d+)/) {
+                my $time = Util::format_time ($1);
+                my $msg = "Server uptime: $time";
+
+                Irc::send_privmsg ($target, $msg);
+            }
         }
     }
 

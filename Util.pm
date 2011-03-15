@@ -35,5 +35,27 @@ sub get_month_num {
     return $months{$m};
 }
 
+sub format_time
+{
+    my ($time) = @_;
+
+    my @parts = gmtime($time);
+    my ($d, $h, $m, $s) = @parts[7, 2, 1, 0];
+
+    my $msg;
+    if ($d) {
+        $msg .= "${d}d ";
+    }
+    if ($h) {
+        $msg .= "${h}h ";
+    }
+    if ($m) {
+        $msg .= "${m}m ";
+    }
+    $msg .= "${s}s ";
+
+    return $msg;
+}
+
 1;
 
