@@ -58,12 +58,14 @@ class Stuff extends DefaultPlugin
             Irc::send_privmsg ($target, $msg);
         }
         elsif ($cmd eq "pew") {
+            say "Before pew";
             if (Irc::is_admin ($sender)) {
                 Irc::send_privmsg ($target, "IMBALAZOR!!!!");
             }
             else {
                 Irc::send_privmsg ($target, "pew..");
             }
+            say "After pew";
         }
         elsif ($cmd =~ /^src|source$/) {
             Irc::send_privmsg ($target, "http://github.com/treeman/Treebot");

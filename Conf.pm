@@ -11,6 +11,8 @@ our $nick = "treebot";
 our $username = "treebot";
 our $realname = "Random Hacks Robot";
 
+our @nick_reserves = ('treebot_', 'treebot2000', 'treestbot');
+
 our @channels = ('#madeoftree', '#theobald');
 
 our $quit_msg = "Time for my beauty sleep.";

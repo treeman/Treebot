@@ -77,6 +77,9 @@ sub cmds;
 sub undoc_cmds;
 sub admin_cmds;
 
+# Bad name?
+#sub process_msg;
+
 sub process_cmd;
 sub process_admin_cmd;
 

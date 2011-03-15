@@ -83,14 +83,20 @@ sub quit;
 sub irc_join;
 sub irc_part;
 sub irc_kick;
+sub irc_nick;
 
 # Helper function to lockdown shared bool
 sub has_connected;
 
 # Cannot run in the same thread as a listener, will sleep
+sub needs_recheck;
+sub recheck_nick;
+sub is_online;
 sub is_authed;
 sub authed_as;
 sub is_admin;
+
+sub sender_to_nick;
 
 sub shall_freeze;
 sub freeze_until;
@@ -120,6 +126,9 @@ my $nick_lock = Thread::Semaphore->new();
 
 my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
+
+# Current nick we're running
+my $botnick;
 
 # Command-line flags
 my $dry :shared;
@@ -336,15 +345,19 @@ sub parse_recieved
         my $code = $2;
         my $param = $3;
 
+        Log::debug "Before process_irc_msg";
         process_irc_msg($prefix, $code, $param);
+        Log::debug "After process_irc_msg";
     }
     else {
         Log::error("Peculiar, we couldn't capture the message: ", $msg);
     }
 
-    if (!shall_freeze()) {
-        Plugin::process_bare_msg ($msg);
-    }
+#    if (!shall_freeze()) {
+#        Log::debug "Before bare msg";
+#        Plugin::process_bare_msg ($msg);
+#        Log::debug "After bare msg";
+#    }
 }
 
 sub parse_pre_login_recieved
@@ -369,9 +382,19 @@ sub parse_pre_login_recieved
         }
         # Nickname in use
         elsif ($code =~ /433/) {
-            # Instead of death try to force use of some random nickname.
-            my $rand_int = int(rand(100));
-            send_msg "NICK $Conf::nick$rand_int";
+            # Try one of our backup nicks
+            if (scalar @Conf::nick_reserves) {
+                my $nick = shift @Conf::nick_reserves;
+
+                send_msg "NICK $nick";
+                $botnick = $nick;
+            }
+            else {
+                # Instead of death try to force use of some random nickname.
+                my $nick = $Conf::nick . int(rand(100));
+                send_msg "NICK $nick";
+                $botnick = $nick;
+            }
         }
     }
     else {
@@ -425,7 +448,8 @@ sub process_irc_msg
         $prefix =~ /^(.+?)!~/;
         my $nick = $1;
 
-        if ($nick eq $Conf::nick) { return };
+        #if ($nick eq $Conf::nick) { return };
+        if ($nick eq $botnick) { return };
 
         $nick_lock->down();
 
@@ -434,6 +458,25 @@ sub process_irc_msg
             $authed_nicks{$nick} = undef;
         }
         $nick_lock->up();
+
+        send_msg "WHOIS $nick";
+    }
+    elsif ($irc_cmd =~ /353/) {
+        $param =~ /= #\S+ :(.*)/;
+
+        say $1;
+
+        my @users = split (/ /, $1);
+
+        for my $nick (@users) {
+            next if $nick eq $botnick;
+
+            $nick_lock->down();
+            if (!exists($authed_nicks{$nick})) {
+                send_msg "WHOIS $nick";
+            }
+            $nick_lock->up();
+        }
     }
     elsif ($irc_cmd =~ /NICK/) {
         $prefix =~ /^(.+?)!~/;
@@ -442,7 +485,8 @@ sub process_irc_msg
         $param =~ /^:(.*)/;
         my $new_nick = $1;
 
-        if ($old_nick eq $Conf::nick) { return };
+        #if ($old_nick eq $Conf::nick) { return };
+        if ($old_nick eq $botnick) { return };
 
         $nick_lock->down();
 
@@ -459,11 +503,13 @@ sub process_irc_msg
         return;
     }
     else {
+        Log::debug "Before privmsg o irc msg";
+        Plugin::process_irc_msg ($prefix, $irc_cmd, $param);
+
         if ($irc_cmd =~ /PRIVMSG/) {
             process_privmsg ($prefix, $irc_cmd, $param);
         }
-
-        Plugin::process_irc_msg ($prefix, $irc_cmd, $param);
+        Log::debug "After privmsg o irc msg";
     }
 }
 
@@ -480,7 +526,8 @@ sub process_privmsg
 
         # if we're the target change target so we don't message ourselves
         # this looks pretty bad really, change?
-        if ($target =~ /$Conf::nick/) {
+        #if ($target =~ /$Conf::nick/) {
+        if ($target =~ /$botnick/) {
             $target = $sender;
         }
 
@@ -488,10 +535,13 @@ sub process_privmsg
             my $cmd = $1;
             my $arg = $2;
 
+            Log::debug "Creating a cmd worker for $cmd";
             create_cmd_worker (\&process_cmd, $sender, $target, $cmd, $arg);
         }
         else {
+            Log::debug "Before privmsg";
             Plugin::process_privmsg ($sender, $target, $msg);
+            Log::debug "After privmsg";
         }
     }
 }
@@ -535,7 +585,11 @@ sub process_cmd
         is_authed $sender;
     }
     else {
+        Log::debug "Before process_cmd";
+
+        recheck_nick ($sender);
         Plugin::process_cmd ($sender, $target, $cmd, $arg);
+        Log::debug "After process_cmd";
     }
 
     if (is_admin($sender)) {
@@ -661,6 +715,8 @@ sub init
     if ($dry) {
         # Pretend to log on to the server
         send_msg "NICK $Conf::nick";
+        $botnick = $Conf::nick;
+
         send_msg "USER $Conf::username 0 * :$Conf::realname";
 
         if ($run_tests) {
@@ -707,6 +763,7 @@ sub init
 
         # Log on to the server.
         send_msg "NICK $Conf::nick";
+        $botnick = $Conf::nick;
         send_msg "USER $Conf::username 0 * :$Conf::realname";
 
         # Worker thread so we can handle both socket input
@@ -729,6 +786,8 @@ sub start
 {
     while (my $input = $in_queue->dequeue()) {
         chomp $input;
+
+        Log::debug "beginning start";
 
         if ($input =~ /^\\(.*)/) {
             $input = $1;
@@ -759,11 +818,16 @@ sub start
         }
 
         if (has_connected()) {
+
+            Log::debug "before recieved";
             parse_recieved $input;
+            Log::debug "after recieved";
         }
         else {
             parse_pre_login_recieved $input;
         }
+
+        Log::debug "ending start";
     }
 }
 
@@ -812,31 +876,38 @@ sub has_connected
     return $has_connected;
 }
 
-sub is_authed
+sub needs_recheck
+{
+    my ($nick) = @_;
+
+    $nick_lock->down();
+    my $need = defined ($authed_nicks{$nick});
+    $nick_lock->up();
+
+    return $need;
+}
+
+sub recheck_nick
 {
     my ($nick) = @_;
     my $whois_sent = 0;
 
-    while (1) {
-        my $defined;
+    if ($nick =~ /^\s*$/) { return; }
 
+    while (1) {
         $nick_lock->down();
-        $defined = defined ($authed_nicks{$nick});
+        my $defined = defined ($authed_nicks{$nick});
         $nick_lock->up();
 
         if ($defined) {
-            if ($authed_nicks{$nick}) {
-                return 1;
-            }
-            else {
-                return 0;
-            }
+            return;
         }
         elsif (!$whois_sent) {
             send_msg "WHOIS $nick";
             $whois_sent = 1;
             freeze_until ('318');
             sleep 1;
+            threads::yield();
         }
         else {
             sleep 1;
@@ -844,10 +915,29 @@ sub is_authed
         }
     }
 }
+
+sub is_online
+{
+
+}
+
+sub is_authed
+{
+    my ($nick) = @_;
+
+    recheck_nick ($nick);
+    $nick_lock->down();
+    my $auth = $authed_nicks{$nick};
+    $nick_lock->up();
+
+    return $auth;
+}
+
 sub authed_as
 {
     my ($nick) = @_;
 
+    recheck_nick ($nick);
     $nick_lock->down();
     my $auth = $authed_nicks{$nick};
     $nick_lock->up();
@@ -879,23 +969,31 @@ sub is_admin
 
 sub shall_freeze
 {
+    Log::debug "Shall freeze?";
+
     $freeze_lock->down();
     my @cmds_left = keys %freeze_until_code;
     $freeze_lock->up();
 
     return scalar @cmds_left;
 }
+
 sub freeze_until
 {
     my ($cmd) = @_;
+
+    Log::debug "Freeze until $cmd";
 
     $freeze_lock->down();
     $freeze_until_code{$cmd} = 1;
     $freeze_lock->up();
 }
+
 sub release_freeze
 {
     my ($cmd) = @_;
+
+    Log::debug "Freeze release $cmd";
 
     $freeze_lock->down();
     delete $freeze_until_code{$cmd};
