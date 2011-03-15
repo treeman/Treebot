@@ -10,7 +10,6 @@ class Git extends DefaultPlugin
 {
     override load
     {
-        say "Git loaded!";
         $self->head(`git rev-parse HEAD`);
     }
 
@@ -32,7 +31,6 @@ class Git extends DefaultPlugin
 
     override cmd_help ($cmd)
     {
-        say "cmd: $cmd";
         if ($cmd eq "git") {
             return "Supported cmds: commit";
         }

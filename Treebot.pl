@@ -8,6 +8,8 @@ use Thread::Queue;
 use MooseX::Declare;
 use Test::More;
 use Getopt::Long;
+use POSIX 'setsid';
+use Carp;
 
 use Log;
 use Irc;
@@ -21,20 +23,26 @@ my $verbose;        # Verbose output, both log and stdout
 my $log_verbose;    # Verbose logging, stdout as usual
 my $bare;           # Only log bare essentials
 my $show_bare;      # Only say the bare essentials
+my $daemonize;      # Start as daemon
 
 my @args = @ARGV;
 
 Getopt::Long::Configure ("bundling");
 GetOptions('test|t' => \$test,
            'run_tests' => \$run_tests,
-           'dry|d' => \$dry,
+           'dry' => \$dry,
            'verbose|v' => \$verbose,
            'log_verbose' => \$log_verbose,
            'bare|b' => \$bare,
-           'show_bare|B' => \$show_bare);
+           'show_bare|B' => \$show_bare,
+           'daemon|d' => \$daemonize);
 
 # register SIGINT failure for cleanup
 $SIG{INT} = \&quit;
+
+if ($daemonize) {
+    daemonize();
+}
 
 Log::init ($verbose, $log_verbose, $bare, $show_bare);
 Log::exe ("Starting");
@@ -87,5 +95,15 @@ sub restart
     sleep 2;
 
     exec ('Treebot.pl', @args);
+}
+
+sub daemonize
+{
+    open STDIN, '/dev/null' or croak "Can't read /dev/null: $!";
+    open STDOUT, '>/dev/null' or croak "Can't write to /dev/null: $!";
+    defined(my $pid = fork) or croak "Can't fork: $!";
+    exit if $pid;
+    croak "Can't start a new session: $!" if setsid == -1;
+    open STDERR, '>&STDOUT' or croak "Can't dup stdout: $!";
 }
 

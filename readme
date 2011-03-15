@@ -1,7 +1,7 @@
 ﻿# Command line options
 -t --test
     Load test run. Don't connect through socket but load plugins at startup.
--d --dry
+--dry
     Dry run. Don't connect through socket and don't load plugins. Otherwise act normally. Used for testing through stdin.
 --run-tests
     Run test cases.
@@ -13,6 +13,8 @@
     Only log the bare essentials, strip everything else.
 -B --show_bare
     Log normally but verbose logging to stdout.
+-d --daemon
+    Start as daemon
 
 # Todo
 *Better return handling for plugin handling
