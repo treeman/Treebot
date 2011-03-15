@@ -128,7 +128,7 @@ my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
 
 # Current nick we're running
-my $botnick;
+my $botnick :shared;
 
 # Command-line flags
 my $dry :shared;
@@ -458,23 +458,6 @@ sub process_irc_msg
             $authed_nicks{$nick} = undef;
         }
         $nick_lock->up();
-
-        #send_msg "WHOIS $nick";
-    }
-    elsif ($irc_cmd =~ /353/) {
-        $param =~ /= #\S+ :(.*)/;
-
-        my @users = split (/ /, $1);
-
-        for my $nick (@users) {
-            next if $nick eq $botnick;
-
-            $nick_lock->down();
-            if (!exists($authed_nicks{$nick})) {
-                #send_msg "WHOIS $nick";
-            }
-            $nick_lock->up();
-        }
     }
     elsif ($irc_cmd =~ /NICK/) {
         $prefix =~ /^(.+?)!~/;
@@ -811,8 +794,10 @@ sub start
 
         # If we don't know if the nick is auth or not, we need to check it
         # freeze until WHOIS returns
-        if (has_connected() && $input =~ /^:(\S+)!~\S* PRIVMSG/) {
+        if (has_connected() && $input =~ /^:(\S+)!~\S* (?:PRIVMSG|JOIN|PART|QUIT)/) {
             my $nick = $1;
+
+            next if $nick eq $botnick;
 
             if (needs_recheck ($nick)) {
                 send_msg "WHOIS $nick";
