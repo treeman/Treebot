@@ -23,8 +23,14 @@ class Torrent extends DefaultPlugin
                 else {
                     #$output =~ /\n.*?(.*)/;
                     my @lines = split (/\r\n|\n/, $output);
-                    my @info = split (/\s+/, $lines[1]);
-                    shift @info; # Remove empty first
+                    my $info = $lines[1];
+                    say $info;
+                    my @info = split (/\s+/, $info);
+
+                    if ($info[0] =~ /^\s*$/) {
+                        say "matching empty";
+                        shift @info; # Remove empty first
+                    }
 
                     my ($have, $dload, $rtdown, $uload, $rtup, $ratio, $conn, $avail, $tr) = @info;
 
