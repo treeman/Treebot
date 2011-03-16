@@ -21,14 +21,12 @@ class Torrent extends DefaultPlugin
                     Irc::send_privmsg ($target, "Daemon not started.");
                 }
                 else {
-                    #$output =~ /\n.*?(.*)/;
+                    # Split lines and split into info
                     my @lines = split (/\r\n|\n/, $output);
-                    my $info = $lines[1];
-                    say $info;
-                    my @info = split (/\s+/, $info);
+                    my @info = split (/\s+/, $lines[1]);
 
+                    # Might be different output for different environments. Not really sure why.
                     if ($info[0] =~ /^\s*$/) {
-                        say "matching empty";
                         shift @info; # Remove empty first
                     }
 
