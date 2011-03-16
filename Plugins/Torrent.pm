@@ -21,8 +21,9 @@ class Torrent extends DefaultPlugin
                     Irc::send_privmsg ($target, "Daemon not started.");
                 }
                 else {
-                    $output =~ /\n(.*)/;
-                    my @info = split (/\s+/, $1);
+                    #$output =~ /\n.*?(.*)/;
+                    my @lines = split (/\r\n|\n/, $output);
+                    my @info = split (/\s+/, $lines[1]);
                     shift @info; # Remove empty first
 
                     my ($have, $dload, $rtdown, $uload, $rtup, $ratio, $conn, $avail, $tr) = @info;
