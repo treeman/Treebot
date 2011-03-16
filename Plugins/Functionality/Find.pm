@@ -12,8 +12,19 @@ use Util;
 
 package Find;
 
-#my $num = "040175561";
-#my $num = "0706826365";
+# Working
+# 0927-10548
+# 040175561
+# 0706826365
+
+# Not working
+# Spaces after
+# 08-50714000
+# Middle name is wierd
+# 063 38059
+# These company links breaks, some strange way of showing address
+# 046-5409600
+# 08-50714000
 
 sub number
 {
@@ -91,14 +102,7 @@ sub hitta
             my @matches;
 
             while ($a =~ /PersonBackground.*?<b>(.*?)<\/td>/sig) {
-                #say $1;
                 my $person = $1;
-                $person =~ /<b>\s*(.*?)\s*<\/b>/s;
-                #say $1;
-                $person =~ /Telefon:\s*(.*?)<br/s;
-                #say $1;
-                $person =~ /Mobil:\s*(.*?)<br/s;
-                #say $1;
 
                 my %info;
 
@@ -164,8 +168,10 @@ sub hitta
                 }
             }
 
-            $info{'address1'} = $good[0];
-            $info{'address2'} = $good[1];
+            if ($#good == 1) {
+                $info{'address1'} = $good[0];
+                $info{'address2'} = $good[1];
+            }
         }
         # They're not split up
         else {
@@ -173,20 +179,29 @@ sub hitta
             $street =~ s/\s+/ /g;
             $street =~ s/^\s*|\s*$//g;
 
-            $a =~ /UCDW_RepeaterFixed__ctl0_LabelStreetNumber">\s*(\S+)\s*<\/span>/s;
-            my $number = $1;
+            if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelStreetNumber">\s*(\S+)\s*<\/span>/s)
+            {
+                my $number = $1;
 
-            $info{'address1'} = "$street $number";
+                $info{'address1'} = "$street $number";
+            }
 
-            $a =~ /UCDW_RepeaterFixed__ctl0_LabelZipCode">\s*(.+?)\s*<\/span>/s;
-            my $zip = $1;
-            chomp $zip;
+            my ($zip, $city);
+            if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelZipCode">\s*(.+?)\s*<\/span>/s)
+            {
+                $zip = $1;
+                chomp $zip;
+            }
 
-            $a =~ /UCDW_RepeaterFixed__ctl0_LabelLocality">\s*(.+?)\s*<\/span>/s;
-            my $city = $1;
-            $city = Util::lc_se($city);
+            if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelLocality">\s*(.+?)\s*<\/span>/s) 
+            {
+                $city = $1;
+                $city = Util::lc_se($city);
+            }
 
-            $info{'address2'} = "$zip $city";
+            if ($zip and $city) {
+                $info{'address2'} = "$zip $city";
+            }
         }
 
         # Name is also a bit distorted
