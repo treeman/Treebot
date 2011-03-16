@@ -3,6 +3,8 @@
 package Util;
 
 use Modern::Perl;
+use utf8;
+use locale;
 
 sub remove_matches
 {
@@ -77,10 +79,22 @@ sub post_space_str
 
     # For some reason it doesn't count these chars as it should. Simple workaround.
     my $botch = $str;
-    $botch =~ s/(ä|ö|å)/x/g;
-    #$botch =~ s/[^[:ascii:]]/x/g;
+    #$botch =~ s/(ä|ö|å)/x/g;
+    $botch =~ s/[^[:ascii:]]/x/g;
     my $spaces = $min - length ($botch);
     return $str . " " x $spaces;
+}
+
+# Swedish lower case
+sub lc_se
+{
+    my ($txt) = @_;
+    $txt = lc($txt);
+
+    my %map = ('Å' => 'å', 'Ä' => 'ä', 'Ö' => 'ö');
+    $txt =~ s/(Å|Ä|Ö)/$map{$1}/g;
+    #$txt =~ s/[^[:ascii:]]//g;
+    return $txt;
 }
 
 1;

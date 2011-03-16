@@ -59,6 +59,7 @@ our @log_whitelist = (
 my @harmless_files = (
     'readme',
     'ideas',
+    '.gitignore',
 );
 our %ignore_on_update;
 for (@harmless_files) {
