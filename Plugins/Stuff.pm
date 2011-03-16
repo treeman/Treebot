@@ -4,11 +4,12 @@ use Modern::Perl;
 use Test::More;
 
 use MooseX::Declare;
+use Time::Seconds;
+
 use Plugin;
 use Conf;
 use Util;
-
-use Time::Seconds;
+use Find;
 
 class Stuff extends DefaultPlugin
 {
@@ -69,6 +70,9 @@ class Stuff extends DefaultPlugin
         }
         elsif ($cmd =~ /^src|source$/) {
             Irc::send_privmsg ($target, "http://github.com/treeman/Treebot");
+        }
+        elsif ($cmd eq "who") {
+            Find::number ($arg);
         }
     }
 
