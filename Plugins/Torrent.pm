@@ -37,11 +37,28 @@ class Torrent extends DefaultPlugin
                     }
                     else {
 
-                        my $msg = "$tr at $have | down: $dload";
-                        if ($have ne "100.0%") {
-                            $msg .= " $rtdown | avail: $avail";
+                        my $msg = "$tr at $have";
+
+                        if ($have ne "100.0%" and $dload ne "0.00M") {
+                            $msg .= " | down:";
+
+                            if ($dload ne "0.00M") {
+                                $msg .= " $dload";
+                            }
+                            if ($have ne "100.0%") {
+                                $msg .= " $rtdown | avail: $avail";
+                            }
                         }
-                        $msg .= " | up: $uload $rtup | ratio: $ratio";
+
+                        if ($uload eq "0.00M" and $rtup eq "0.00kB/s") {
+                            $msg .= " | conn: $conn";
+                        }
+                        else {
+                            $msg .= " | up: $uload $rtup";
+
+                        }
+
+                        $msg .= " | ratio: $ratio";
 
                         Irc::send_privmsg ($target, $msg);
                     }
