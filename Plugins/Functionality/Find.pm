@@ -158,19 +158,22 @@ sub hitta
 
         # If they're split up
         if (scalar @s > 1) {
-            my @good;
-            for (@s) {
-                if (/^\s*$/sm) {
-                    next;
-                }
-                else {
-                    push (@good, $_);
-                }
-            }
 
-            if ($#good == 1) {
-                $info{'address1'} = $good[0];
-                $info{'address2'} = $good[1];
+            if ($street !~ /Adress saknas/) {
+                my @good;
+                for (@s) {
+                    if (/^\s*$/sm) {
+                        next;
+                    }
+                    else {
+                        push (@good, $_);
+                    }
+                }
+
+                if ($#good == 1) {
+                    $info{'address1'} = $good[0];
+                    $info{'address2'} = $good[1];
+                }
             }
         }
         # They're not split up
@@ -216,7 +219,10 @@ sub hitta
                 <\/td>
                 /xs;
         my $name = $1;
-        $name =~ s/<span [^>]+>(.*?)<\/span>/ $1/g;
+#        $name =~ s/<span [^>]+>(.*?)<\/span>/ $1/g;
+
+        # Some have their job description here
+        $name =~ s/<span [^>]+>(.*?)<\/span>//g;
         $name =~ s/\s+/ /g;
         $name =~ s/^\s*|\s*$//g;
 
