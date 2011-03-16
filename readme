@@ -30,6 +30,7 @@
     Must have a way of checking if a user is online or not
     Otherwise bind to join
     Store/Retrieve from file on startup/shutdown
+*Anti flood when sending a lot of info
 
 # Bugs
 *^C hangs on stdin getline, quits after enter (only sometimes?)
