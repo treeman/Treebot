@@ -57,5 +57,31 @@ sub format_time
     return $msg;
 }
 
+# Add in spaces if the string isn't at least this long
+sub pre_space_str
+{
+    my ($str, $min) = @_;
+
+    # For some reason it doesn't count these chars as it should. Simple workaround.
+    my $botch = $str;
+    $botch =~ s/(ä|ö|å)/x/g;
+    #$botch =~ s/[^[:ascii:]]/x/g;
+    my $spaces = $min - length ($botch);
+
+    return " " x $spaces . $str;
+}
+
+sub post_space_str
+{
+    my ($str, $min) = @_;
+
+    # For some reason it doesn't count these chars as it should. Simple workaround.
+    my $botch = $str;
+    $botch =~ s/(ä|ö|å)/x/g;
+    #$botch =~ s/[^[:ascii:]]/x/g;
+    my $spaces = $min - length ($botch);
+    return $str . " " x $spaces;
+}
+
 1;
 
