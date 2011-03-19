@@ -504,6 +504,13 @@ sub process_privmsg
         $prefix =~ /^(.+?)!~/;
         my $sender = $1;
 
+        # Ignore clones of ourselves
+        if (is_authed ($sender)) {
+            if (authed_as ($sender) eq "treebot") {
+                return;
+            }
+        }
+
         # if we're the target change target so we don't message ourselves
         # this looks pretty bad really, change?
         if ($target =~ /$botnick/) {

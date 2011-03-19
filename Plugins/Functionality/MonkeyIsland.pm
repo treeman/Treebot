@@ -256,16 +256,17 @@ my %monkey_island4 = (
     "It's laughter that's caused by your feathery grip.",
 );
 
-my %insults =
-    (%monkey_island1, %sword_master,
-     %monkey_island3, %captain_rottingham, %monkey_island4);
-
 my @failed_retorts = (
     "I am rubber, you are glue.",
     "Oh yeah?",
     "I'm shaking, I'm shaking!",
     "Ok, I give up!",
 );
+
+my %insults =
+    (%monkey_island1, %sword_master,
+     %monkey_island3, %captain_rottingham, %monkey_island4);
+
 
 my $last_insult :shared;
 
