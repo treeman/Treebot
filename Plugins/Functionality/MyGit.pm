@@ -44,6 +44,11 @@ sub needs_restart
     return 0;
 }
 
+sub check_activity
+{
+
+}
+
 sub update_src
 {
     # Need to set in config instead
