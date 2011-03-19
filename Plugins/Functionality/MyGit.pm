@@ -24,8 +24,10 @@ sub files_changed
 
 sub outside_changes
 {
-    my $curr_head = `git rev-parse HEAD`;
-    return $head != $curr_head;
+    # Borked! Doesn't work, will always flag..
+    #my $curr_head = `git rev-parse HEAD`;
+    #return $head != $curr_head;
+    return 0;
 }
 
 sub needs_restart
@@ -97,7 +99,6 @@ sub changes_this_week
 
     return changes_since ($nice) . " last 7 days.";
 }
-
 
 sub changes_since
 {
