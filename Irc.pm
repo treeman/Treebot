@@ -16,6 +16,7 @@ use Test::More;
 use Plugin;
 use Log;
 use Conf;
+use Msgs;
 use Util;
 use Tests;
 
@@ -448,7 +449,6 @@ sub process_irc_msg
         $prefix =~ /^(.+?)!~/;
         my $nick = $1;
 
-        #if ($nick eq $Conf::nick) { return };
         if ($nick eq $botnick) { return };
 
         $nick_lock->down();
@@ -466,7 +466,6 @@ sub process_irc_msg
         $param =~ /^:(.*)/;
         my $new_nick = $1;
 
-        #if ($old_nick eq $Conf::nick) { return };
         if ($old_nick eq $botnick) { return };
 
         $nick_lock->down();
@@ -498,7 +497,7 @@ sub process_privmsg
 {
     my ($prefix, $irc_cmd, $param) = @_;
 
-    if( $param =~ /^(\S+)\s:(.*)$/ ) {
+    if ($param =~ /^(\S+)\s:(.*)$/) {
         my $target = $1;
         my $msg = $2;
 
@@ -507,12 +506,15 @@ sub process_privmsg
 
         # if we're the target change target so we don't message ourselves
         # this looks pretty bad really, change?
-        #if ($target =~ /$Conf::nick/) {
         if ($target =~ /$botnick/) {
             $target = $sender;
         }
 
-        if ($msg =~ $match_cmd) {
+        if ($msg eq "help") {
+            send_privmsg ($target,
+                "If you want my help type ${Conf::cmd_prefix}help");
+        }
+        elsif ($msg =~ $match_cmd) {
             my $cmd = $1;
             my $arg = $2;
 
@@ -533,7 +535,10 @@ sub process_cmd
 
     if ($cmd eq "help") {
         if ($arg =~ /^\s*$/) {
-            Irc::send_privmsg ($target, $Conf::help_msg);
+            Irc::send_privmsg ($target, $Msgs::help_msg);
+        }
+        elsif ($arg eq "help") {
+            Irc::send_privmsg ($target, "A friendly help message for my commands.");
         }
         else {
             my $help_sent = 0;
@@ -545,7 +550,7 @@ sub process_cmd
             }
 
             if (!$help_sent) {
-                Irc::send_privmsg ($target, $Conf::help_missing);
+                Irc::send_privmsg ($target, $Msgs::help_missing);
             }
         }
     }
@@ -834,7 +839,7 @@ sub quit
         send_msg "QUIT :$msg";
     }
     else {
-        send_msg "QUIT :$Conf::quit_msg";
+        send_msg "QUIT :$Msgs::quit_msg";
     }
 }
 
