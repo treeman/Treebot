@@ -55,12 +55,11 @@
     follows nick change, check admin auth nick - not the normal one
     admin authed nicks set in config
 *botsnack
-*cmds
-    add synnonym commands
-    list all commands
+*cmds for regular, admin, undoc
 *git
     current commit
 *hello
+    supports different saluts
 *help
     general help
     individual help messages
@@ -77,4 +76,6 @@
 *undocumented_cmds
 *uptime
 *restart
+*whois?
+    Check who/what swedish numbers belong to
 

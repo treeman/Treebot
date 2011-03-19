@@ -23,6 +23,9 @@ class Admin extends DefaultPlugin
             my $msg = $2;
             Irc::send_privmsg ($target, $msg);
         }
+        elsif ($cmd eq "pipe") {
+            Irc::push_out ($arg);
+        }
         elsif ($cmd eq "join") {
             Irc::irc_join ($arg);
         }

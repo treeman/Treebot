@@ -19,6 +19,7 @@ use Conf;
 use Msgs;
 use Util;
 use Tests;
+use Git;
 
 # Create a worker thread and store it in workers
 sub create_cmd_worker;
@@ -107,9 +108,6 @@ sub release_freeze;
 sub cmds;
 sub undoc_cmds;
 sub admin_cmds;
-
-# Pull from our origin to update source files and either restart or reload plugins
-sub update_src;
 
 # Run tests and exit
 sub run_tests;
@@ -604,7 +602,21 @@ sub process_admin_cmd
         send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "update") {
-        update_src ($target);
+        say "updating!";
+        Git::update_src ($target);
+        if (Git::needs_restart()) {
+            my $msg = "Files changed: " . join(", ", Git::files_changed());
+            send_privmsg ($target, $msg);
+            main::restart ("Updating...");
+        }
+        else {
+            if (scalar Git::files_changed()) {
+                send_privmsg ($target, "Nothing of vital importance changed.");
+            }
+            else {
+                send_privmsg ($target, "Already up to date.");
+            }
+        }
     }
     elsif ($cmd eq "load") {
         my @list = split (/ /, $arg);
@@ -1049,135 +1061,6 @@ sub admin_cmds
     return sort keys %cmds;
 }
 
-sub update_src
-{
-    my ($target) = @_;
-
-    # Need to set in config instead
-    my $remote = "origin";
-    my $branch = "master";
-
-    my $response = `git pull $remote $branch`;
-
-    update_from_git_pull ($response, $target);
-}
-
-sub update_from_git_pull
-{
-    my ($response, $target) = @_;
-
-    if ($response =~ /Already up-to-date\./) {
-        send_privmsg ($target, "Already up to date.");
-    }
-    else {
-        my @lines = split(/\r\n|\r|\n/, $response);
-
-        # Skip to files changed
-        while (defined (my $line = shift @lines)) {
-            if ($line =~ /fast.forward/i) {
-                last;
-            }
-        }
-
-        my @files_changed;
-
-        while (defined (my $line = shift @lines)) {
-            if ($line =~ /(\S+)\s+\|/) {
-                push (@files_changed, $1);
-            }
-            else {
-                last;
-            }
-        }
-
-        my $msg =  "Files changed: " . join (", ", @files_changed);
-        send_privmsg ($target, $msg);
-
-#        my $total_restart = 0;
-#        my $reload_all = 0;
-        my $mostly_harmless = 1;
-
-#        my @plugins_affected;
-#        my @subfolders;
-
-#        my $pf = $Conf::plugin_folder;
-        my %harmless = %Conf::ignore_on_update;
-
-        for (@files_changed) {
-            if ($harmless{$_}) {
-                next;
-            }
-#            elsif (!/^$pf/) {
-            else {
-#                $total_restart = 1;
-                $mostly_harmless = 0;
-                last;
-            }
-#            elsif (/^$pf([^\/]+)\.pm$/) {
-#                push (@plugins_affected, $1);
-#            }
-#            elsif (/^$pf([^\/]+)\/.+/) {
-#                push (@subfolders, $1);
-#            }
-#            else {
-#                # Random file in plugin directory
-#                $reload_all = 1;
-#            }
-        }
-
-#        if ($total_restart) {
-        if (!$mostly_harmless) {
-#            send_privmsg ($target, "We need a total restart here.");
-            send_privmsg ($target, "We're looking like Windows updating here, brb.");
-            if (!$run_tests) {
-                say "Restart needed!";
-                main::restart ("Updating...");
-            }
-#            return;
-        }
-
-#        if ($reload_all) {
-#            send_privmsg ($target, "We need to reload all plugins.");
-#            if (!$run_tests) {
-#                Plugin::reload_all();
-#            }
-#            return;
-#        }
-#
-#        if (scalar @subfolders) {
-#            my @plugins = Plugin::available();
-#
-#            for my $sub (@subfolders) {
-#                my $match_found = 0;
-#                for my $p (@plugins) {
-#                    if ($sub =~ /\E$p\Q/i) {
-#                        push (@plugins_affected, $p);
-#                        $match_found = 1;
-#                    }
-#                }
-#
-#                if (!$match_found) {
-#                    send_privmsg ($target, "We need to reload all plugins.");
-#                    if (!$run_tests) {
-#                        Plugin::reload_all();
-#                    }
-#                    return;
-#                }
-#            }
-#        }
-#
-#        for (@plugins_affected) {
-#            if (!$run_tests) {
-#                my $msg = Plugin::reload ($_);
-#                send_privmsg ($target, $msg);
-#            }
-#            else {
-#                send_privmsg ($target, "Reloading '$_'");
-#            }
-#        }
-    }
-}
-
 sub run_tests
 {
     # We want it to behave as normal, but without redirecting the output
@@ -1226,57 +1109,10 @@ sub run_post_login_tests
     ok(Irc::has_connected(), "Test connection");
 
     # Test core irc functions here
-    test_update_src();
+    Git::test_update_src();
 
     # Move on to test plugins
     Plugin::run_tests();
-}
-
-sub test_update_src
-{
-    my @tests = (
-        "Fast-forward
-        plugin/Insults/Admin.pm |  183 -----------------------------------------------
-        plugin/Admin.pm |  183 ---------------------------------------------------
-        plugin/Down.pm |  183 ---------------------------------------------------
-        readme | pew
-        ideas | ladida
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/crap/crap |  183 ---------------------------------------------------
-        plugin/Admin.pm |  183 ---------------------------------------------------
-        plugin/Down.pm |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/Insults/Admin.pm |  183 -----------------------------------------------
-        plugin/Admin.pm |  183 ---------------------------------------------------
-        core |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/douche |  183 ---------------------------------------------------
-        core |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/douche |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "From forest:treebot
-        * branch            master     -> FETCH_HEAD
-        Already up-to-date.",
-    );
-
-    for (@tests) {
-        update_from_git_pull ($_, "");
-    }
 }
 
 1;

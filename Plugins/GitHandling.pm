@@ -6,13 +6,10 @@ use Test::More;
 use MooseX::Declare;
 use Plugin;
 
-class Git extends DefaultPlugin
-{
-    override load
-    {
-        $self->head(`git rev-parse HEAD`);
-    }
+use MyGit;
 
+class GitHandling extends DefaultPlugin
+{
     override cmds
     {
         return qw(git);
@@ -21,9 +18,8 @@ class Git extends DefaultPlugin
     override process_cmd ($sender, $target, $cmd, $arg)
     {
         if ($cmd eq "git") {
-            if ($arg =~ /^commit$/) {
-                my $head = $self->head();
-                chomp $head;
+            if ($arg eq "head") {
+                my $head = Git::head();
                 Irc::send_privmsg ($target, "Latest commit: $head");
             }
         }
@@ -34,12 +30,10 @@ class Git extends DefaultPlugin
         if ($cmd eq "git") {
             return "Supported cmds: commit";
         }
-        elsif ($cmd eq "git commit") {
+        elsif ($cmd eq "git head") {
             return "Show current commit.";
         }
     }
-
-    has 'head', is => 'rw';
 }
 
 1;
