@@ -604,12 +604,7 @@ sub process_admin_cmd
     elsif ($cmd eq "update") {
         Git::update_src ($target);
 
-        if (Git::outside_changes()) {
-            send_privmsg ($target, "Pulled from the outside.");
-            send_privmsg ($target, "We're looking like Windows update here, brb.");
-            main::restart ("Updating...");
-        }
-        elsif (Git::needs_restart()) {
+        if (Git::needs_restart()) {
             my $msg = "Files changed: " . join(", ", Git::files_changed());
             send_privmsg ($target, $msg);
             send_privmsg ($target, "We're looking like Windows update here, brb.");

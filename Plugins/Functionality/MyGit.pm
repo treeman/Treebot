@@ -22,14 +22,6 @@ sub files_changed
     return @files_changed;
 }
 
-sub outside_changes
-{
-    # Borked! Doesn't work, will always flag..
-    #my $curr_head = `git rev-parse HEAD`;
-    #return $head != $curr_head;
-    return 0;
-}
-
 sub needs_restart
 {
     my @core;
