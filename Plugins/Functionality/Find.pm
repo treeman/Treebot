@@ -1,30 +1,17 @@
 #!/usr/bin/perl -w
 
-use Modern::Perl;
-use Test::More;
-use Carp;
-use LWP::Simple;
-
 use utf8;
 use locale;
+
+use Modern::Perl;
+use Carp;
+use LWP::Simple;
 
 use Util;
 
 package Find;
 
-# Working
-# 0927-10548
-# 040175561
-# 0706826365
-
-# Not working
-# Spaces after
-# 08-50714000
-# Middle name is wierd
-# 063 38059
-# These company links breaks, some strange way of showing address
-# 046-5409600
-# 08-50714000
+use Test::More;
 
 sub number
 {
@@ -110,13 +97,17 @@ sub hitta
                     my $found = $1;
                     $found =~ s/<\/?[^>]+>//g;
                     $found =~ s/\s+/ /g;
-                    #say "uno";
-                    #say $found;
+                    $found = Util::lc_se ($found);
 
                     if ($found =~ /^Telefon: (.*?)\s*/) {
-                        $info{'tele'} = $1;
+                        if (defined ($info{'tele'})) {
+                            $info{'tele'} .= ", " . $1;
+                        }
+                        else {
+                            $info{'tele'} = $1;
+                        }
                     }
-                    elsif ($found =~ /^Mobil: (.*?)\s*/) {
+                    if ($found =~ /^Mobil: (.*?)\s*/) {
                         $info{'mobile'} = $1;
                     }
                     else {
@@ -141,69 +132,93 @@ sub hitta
         }
     }
     else {
-        $hitta =~ /href="callto:[^"]+">\s*([^<]+)\s*<\/a>/s;
-        my $mobile = $1;
+        while ($hitta =~ /href="callto:[^"]+">\s*([^<]+)\s*<\/a>/sg) {
+            my $mobile = $1;
 
-        $info{'mobile'} = $mobile;
-
-        $hitta =~ /<strong>\s*Adress\s*<\/strong>(.*?)<\/div>/s;
-        my $a = $1;
-
-        $a =~ /UCDW_RepeaterFixed__ctl0_LabelStreetName">\s*(\S+)\s*<\/span>/s;
-        my $street = $1;
-
-        # Sometimes the street and number and zip and city are separated
-        # Sometimes they're not...
-        my @s = split (/<[^>]+>/, $street);
-
-        # If they're split up
-        if (scalar @s > 1) {
-
-            if ($street !~ /Adress saknas/) {
-                my @good;
-                for (@s) {
-                    if (/^\s*$/sm) {
-                        next;
-                    }
-                    else {
-                        push (@good, $_);
-                    }
-                }
-
-                if ($#good == 1) {
-                    $info{'address1'} = $good[0];
-                    $info{'address2'} = $good[1];
-                }
+            if (defined ($info{'mobile'})) {
+                $info{'mobile'} .= ", " . $mobile;
+            }
+            else {
+                $info{'mobile'} = $mobile;
             }
         }
-        # They're not split up
-        else {
-            $street =~ s/<[^>]+>/ /g;
-            $street =~ s/\s+/ /g;
-            $street =~ s/^\s*|\s*$//g;
 
-            if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelStreetNumber">\s*(\S+)\s*<\/span>/s)
-            {
-                my $number = $1;
 
-                $info{'address1'} = "$street $number";
+        if ($hitta =~ /<strong>\s*Adress\s*<\/strong>(.*?)<\/div>/s) {
+            my $a = $1;
+
+            $a =~ /UCDW_RepeaterFixed__ctl0_LabelStreetName">\s*(\S+)\s*<\/span>/s;
+            my $street = $1;
+
+            # Sometimes the street and number and zip and city are separated
+            # Sometimes they're not...
+            my @s = split (/<[^>]+>/, $street);
+
+            # If they're split up
+            if (scalar @s > 1) {
+                if ($street !~ /Adress saknas/) {
+                    my @good;
+                    for (@s) {
+                        if (/^\s*$/sm) {
+                            next;
+                        }
+                        else {
+                            m/^\s*(.*?)\s*$/;
+                            push (@good, $1);
+                        }
+                    }
+
+                    # If the street and city are joined with postnumber and street num
+                    if ($#good == 1) {
+                        $info{'address1'} = Util::lc_se ($good[0]);
+                        $info{'address2'} = Util::lc_se ($good[1]);
+                    }
+                    # Else they're split up in a set order
+                    elsif ($#good > 3) {
+                        my ($street, $zip, $post, $city) = @good[0, 1, 2, 3];
+                        $street = Util::lc_se ($street);
+                        $city = Util::lc_se ($city);
+                        $info{'address1'} = "$street $zip";
+                        $info{'address2'} = "$post $city";
+                    }
+                }
             }
+            # They're not split up
+            else {
+                $street =~ s/<[^>]+>/ /g;
+                $street =~ s/\s+/ /g;
+                $street =~ s/^\s*|\s*$//g;
+                $street = Util::lc_se ($street);
 
-            my ($zip, $city);
-            if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelZipCode">\s*(.+?)\s*<\/span>/s)
-            {
-                $zip = $1;
-                chomp $zip;
-            }
+                if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelStreetNumber">
+                             \s*(\S+)\s*
+                           <\/span>/xs)
+                {
+                    my $number = $1;
 
-            if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelLocality">\s*(.+?)\s*<\/span>/s) 
-            {
-                $city = $1;
-                $city = Util::lc_se($city);
-            }
+                    $info{'address1'} = "$street $number";
+                }
 
-            if ($zip and $city) {
-                $info{'address2'} = "$zip $city";
+                my ($zip, $city);
+                if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelZipCode">
+                             \s*(.+?)\s*
+                           <\/span>/xs)
+                {
+                    $zip = $1;
+                    chomp $zip;
+                }
+
+                if ($a =~ /UCDW_RepeaterFixed__ctl0_LabelLocality">
+                             \s*(.+?)\s*
+                           <\/span>/xs)
+                {
+                    $city = $1;
+                    $city = Util::lc_se($city);
+                }
+
+                if ($zip and $city) {
+                    $info{'address2'} = "$zip $city";
+                }
             }
         }
 
@@ -219,7 +234,7 @@ sub hitta
                 <\/td>
                 /xs;
         my $name = $1;
-#        $name =~ s/<span [^>]+>(.*?)<\/span>/ $1/g;
+        #$name =~ s/<span [^>]+>(.*?)<\/span>/ $1/g;
 
         # Some have their job description here
         $name =~ s/<span [^>]+>(.*?)<\/span>//g;
@@ -230,6 +245,22 @@ sub hitta
 
         return (\%info);
     }
+}
+
+sub number_tests
+{
+    # Just some numbers testing stuff.
+    like (Find::number("0927-10548"), qr/(Eva Huhta|Peter Hietala)+/i, "whois: Home");
+    like (Find::number("0706826365"),
+        qr/Jonas Hietala: 070-?6826365.*lantmannagatan 126.*583\s?32.*linköping/i,
+        "whois: My phone");
+    like (Find::number("013-4791100"),
+        qr/Opera Software.*013-4791100.*linköping/i, "whois: opera");
+    like (Find::number("046-5409600"), qr/enea AB/i, "whois: enea");
+    like (Find::number("08-50714000"), qr/08-50714000, 08-50714040/,
+        "whois: enea multi");
+    like (Find::number("070-8776196"),
+        qr/070-8776196, 070-2772847, 070-7779763, 0485-75233/, "whois: many numbers");
 }
 
 1;

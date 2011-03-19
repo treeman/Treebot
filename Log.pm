@@ -18,10 +18,11 @@ my $verbose;
 my $bare;
 my $show_bare;
 my $debug;
+my $no_show;
 
 sub init
 {
-    ($verbose, $log_verbose, $bare, $show_bare, $debug) = @_;
+    ($verbose, $log_verbose, $bare, $show_bare, $debug, $no_show) = @_;
     open_log_file();
 
     # Log warnings
@@ -56,7 +57,7 @@ sub store
     elsif ($verbose) {
         say $msg;
     }
-    elsif (!$blacklisted) {
+    elsif (!$no_show and !$blacklisted) {
         say $msg;
     }
 

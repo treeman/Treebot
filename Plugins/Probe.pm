@@ -55,6 +55,11 @@ class Probe extends DefaultPlugin
             return "Got an unknown number? I'm here to help.";
         }
     }
+
+    override run_tests ()
+    {
+        Find::number_tests();
+    }
 }
 
 1;

@@ -415,6 +415,8 @@ sub get_cmd_help
 
 sub run_tests
 {
+    say "Testing plugins:";
+
     $lock->down();
     for my $plugin (values %{$plugins})
     {

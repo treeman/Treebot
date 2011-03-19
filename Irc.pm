@@ -511,8 +511,7 @@ sub process_privmsg
         }
 
         if ($msg eq "help") {
-            send_privmsg ($target,
-                "If you want my help type ${Conf::cmd_prefix}help");
+            send_privmsg ($target, $Msgs::help_help);
         }
         elsif ($msg =~ $match_cmd) {
             my $cmd = $1;
@@ -1194,10 +1193,11 @@ sub run_tests
 
 sub run_pre_login_tests
 {
-    # Run plugin tests in main thread
-    if ($run_tests) {
-        Plugin::run_tests();
-    }
+    # Add login events in input queue. It will login after this function returns
+    Irc::push_in (":wineasy1.se.quakenet.org 001 treebot :Welcome dawg");
+    Irc::push_in (":wineasy1.se.quakenet.org 002 treebot :I shall be ur host today");
+    Irc::push_in (":wineasy1.se.quakenet.org 003 treebot :I was carved out of wood");
+    Irc::push_in (":wineasy1.se.quakenet.org 004 treebot :How I wntd to log you in!");
 
     like(".cmd", $match_cmd, "simple command");
     like(".cmd arg", $match_cmd, "arg command");
@@ -1215,7 +1215,14 @@ sub run_pre_login_tests
 
 sub run_post_login_tests
 {
+    # Test that we actually logged in
+    ok(Irc::has_connected(), "Test connection");
+
+    # Test core irc functions here
     test_update_src();
+
+    # Move on to test plugins
+    Plugin::run_tests();
 }
 
 sub test_update_src
@@ -1231,7 +1238,7 @@ sub test_update_src
         delete mode 100644 test_cube_match.adb",
 
         "Fast-forward
-        plugin/bajs/crap |  183 ---------------------------------------------------
+        plugin/crap/crap |  183 ---------------------------------------------------
         plugin/Admin.pm |  183 ---------------------------------------------------
         plugin/Down.pm |  183 ---------------------------------------------------
         3 files changed, 108 insertions(+), 206 deletions(-)

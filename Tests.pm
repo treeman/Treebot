@@ -13,22 +13,6 @@ use Carp;
 
 use Plugin;
 
-# Will get threaded
-sub run_tests
-{
-    Irc::push_in (":wineasy1.se.quakenet.org 001 treebot :Welcome dawg");
-    Irc::push_in (":wineasy1.se.quakenet.org 002 treebot :I shall be your host today");
-    Irc::push_in (":wineasy1.se.quakenet.org 003 treebot :I was carved out of wood");
-    Irc::push_in (":wineasy1.se.quakenet.org 004 treebot :And oh how I wanted to log you in!");
-
-    # Give some time to respond
-    sleep 1;
-
-    ok(Irc::has_connected(), "Test connection");
-
-    #Plugin::run_tests();
-}
-
 # Need to figure out a nice way to check events after we sent something
 sub out
 {
