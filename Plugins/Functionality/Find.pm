@@ -82,15 +82,16 @@ sub missatsamtal
 
     my $site = LWP::Simple::get "http://www.missatsamtal.se/telefonnummer/$what/";
 
-    my %info;
     if ($site =~ /Enligt\sde\sflesta\shör\sdetta\sföretag\still<\/legend>\s*
                    <strong>\s*(.*?)\s*<\/strong>/xsi)
     {
         my @r = split (/<[^>]+>/, decode_entities($1));
-        $info{'guess'} = join (", ", @r);
-    }
 
-    return (\%info);
+        my %info;
+        $info{'guess'} = join (", ", @r);
+        return (\%info);
+    }
+    return ();
 }
 
 # This is huge, hacky and ugly...
@@ -276,6 +277,10 @@ sub hitta
 sub number_tests
 {
     # Just some numbers testing stuff.
+    like (Find::number("000-000"), qr/nothing found/i, "whois: 000");
+    like (Find::number("000-00-00"), qr/bad number/i, "whois: 00-00-00");
+    like (Find::number("asdf"), qr/bad number/i, "whois: alpha");
+
     like (Find::number("0927-10548"), qr/(Eva Huhta|Peter Hietala)+/i, "whois: Home");
     like (Find::number("0706826365"),
         qr/Jonas Hietala: 070-?6826365.*lantmannagatan 126.*583\s?32.*linköping/i,
