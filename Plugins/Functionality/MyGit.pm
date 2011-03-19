@@ -120,7 +120,7 @@ sub changes_since
         $deleted += $3;
     }
 
-    return "$added added and $deleted lines deleted";
+    return "$added lines added and $deleted deleted";
 }
 
 sub test_update_src
