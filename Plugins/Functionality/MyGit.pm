@@ -98,6 +98,7 @@ sub changes_this_week
     return changes_since ($nice) . " last 7 days.";
 }
 
+
 sub changes_since
 {
     my ($latest) = @_;
