@@ -32,7 +32,16 @@ sub needs_restart
             push (@core, $1);
         }
     }
-    return scalar @core;
+    if (scalar @core) {
+        return 1;
+    }
+
+    my $curr_head = `git rev-parse HEAD`;
+    if ($head != $curr_head) {
+        return 1;
+    }
+
+    return 0;
 }
 
 sub update_src
@@ -82,8 +91,8 @@ sub test_update_src
         Already up-to-date.",
     );
     ok( !needs_restart(), "Update nothing");
-
     @files_changed = ();
+
     update_from_git_pull(
         "Fast-forward
         plugin/Insults/Admin.pm |  183 -----------------------------------------------
@@ -95,8 +104,8 @@ sub test_update_src
         delete mode 100644 test_cube_match.adb",
     );
     ok( needs_restart(), "Update regular");
-
     @files_changed = ();
+
     update_from_git_pull(
         "Fast-forward
         readme |  183 ---------------------------------------------------
@@ -106,6 +115,28 @@ sub test_update_src
         delete mode 100644 test_cube_match.adb"
     );
     ok( !needs_restart(), "Update ignore dumb files");
+    @files_changed = ();
+
+    update_from_git_pull(
+        "remote: Counting objects: 17, done.
+        remote: Compressing objects: 100% (10/10), done.
+        remote: Total 10 (delta 7), reused 0 (delta 0)
+        Unpacking objects: 100% (10/10), done.
+        From /home/git/repositories/treebot
+        * branch            master     -> FETCH_HEAD
+        Updating 3a831aa..2dc703f
+        Fast-forward
+        Irc.pm                                |  198 +++------------------------------
+        Plugins/Admin.pm                      |    3 +
+        Plugins/Functionality/MonkeyIsland.pm |    2 +-
+        Plugins/Functionality/MyGit.pm        |  173 ++++++++++++++++++++++++++++
+        Plugins/{Git.pm => GitHandling.pm}    |   18 +--
+        readme                                |    7 +-
+        6 files changed, 204 insertions(+), 197 deletions(-)
+        create mode 100644 Plugins/Functionality/MyGit.pm
+        rename Plugins/{Git.pm => GitHandling.pm} (64%)"
+    );
+    ok( needs_restart(), "Big updates");
     @files_changed = ();
 
 # These tests are more for testing plugin reload than anything else.
