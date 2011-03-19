@@ -4,14 +4,14 @@ use utf8;
 use locale;
 
 use Modern::Perl;
-use Carp;
-use LWP::Simple;
-
-use Util;
 
 package Find;
 
+use Carp;
+use LWP::Simple;
+use Util;
 use Test::More;
+use HTML::Entities;
 
 sub number
 {
@@ -23,7 +23,9 @@ sub number
     else {
         my @infos = Find::hitta ($num);
         if (scalar @infos) {
-
+            return format_info (@infos);
+        }
+        elsif (scalar (@infos = missatsamtal ($num))) {
             return format_info (@infos);
         }
         else {
@@ -40,20 +42,25 @@ sub format_info
         my ($ref) = @_;
         my %info = %$ref;
 
-        my $str = "$info{'name'}:";
-        if ($info{'tele'}) {
-            $str .= " $info{'tele'}";
+        if (defined ($info{'guess'})) {
+            return "I'm guessing: " . $info{'guess'};
         }
-        if ($info{'mobile'}) {
-            $str .= " $info{'mobile'}";
+        else {
+            my $str = "$info{'name'}:";
+            if ($info{'tele'}) {
+                $str .= " $info{'tele'}";
+            }
+            if ($info{'mobile'}) {
+                $str .= " $info{'mobile'}";
+            }
+            if ($info{'address1'}) {
+                $str .= " | $info{'address1'}";
+            }
+            if ($info{'address2'}) {
+                $str .= " | $info{'address2'}";
+            }
+            return $str;
         }
-        if ($info{'address1'}) {
-            $str .= " | $info{'address1'}";
-        }
-        if ($info{'address2'}) {
-            $str .= " | $info{'address2'}";
-        }
-        return $str;
     }
     else {
         my $str = "$num matches:";
@@ -68,6 +75,25 @@ sub format_info
     }
 }
 
+# This is small, smart and nice
+sub missatsamtal
+{
+    my ($what) = @_;
+
+    my $site = LWP::Simple::get "http://www.missatsamtal.se/telefonnummer/$what/";
+
+    my %info;
+    if ($site =~ /Enligt\sde\sflesta\shör\sdetta\sföretag\still<\/legend>\s*
+                   <strong>\s*(.*?)\s*<\/strong>/xsi)
+    {
+        my @r = split (/<[^>]+>/, decode_entities($1));
+        $info{'guess'} = join (", ", @r);
+    }
+
+    return (\%info);
+}
+
+# This is huge, hacky and ugly...
 sub hitta
 {
     my ($what) = @_;
@@ -261,6 +287,9 @@ sub number_tests
         "whois: enea multi");
     like (Find::number("070-8776196"),
         qr/070-8776196, 070-2772847, 070-7779763, 0485-75233/, "whois: many numbers");
+
+    like (Find::number("040175561"),
+        qr/hälsokost/i, "whois: missatsamtal");
 }
 
 1;
