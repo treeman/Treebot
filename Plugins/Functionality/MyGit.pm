@@ -136,66 +136,6 @@ sub test_update_src
     );
     ok( needs_restart(), "Big updates");
     @files_changed = ();
-
-# These tests are more for testing plugin reload than anything else.
-    my @tests = (
-        "Fast-forward
-        plugin/Insults/Admin.pm |  183 -----------------------------------------------
-        plugin/Admin.pm |  183 ---------------------------------------------------
-        plugin/Down.pm |  183 ---------------------------------------------------
-        readme | pew
-        ideas | ladida
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/crap/crap |  183 ---------------------------------------------------
-        plugin/Admin.pm |  183 ---------------------------------------------------
-        plugin/Down.pm |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/Insults/Admin.pm |  183 -----------------------------------------------
-        plugin/Admin.pm |  183 ---------------------------------------------------
-        core |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/douche |  183 ---------------------------------------------------
-        core |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "Fast-forward
-        plugin/douche |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-
-        "From forest:treebot
-        * branch            master     -> FETCH_HEAD
-        Already up-to-date.",
-
-        "Fast-forward
-        readme |  183 ---------------------------------------------------
-        ideas |  183 ---------------------------------------------------
-        .gitignore |  183 ---------------------------------------------------
-        3 files changed, 108 insertions(+), 206 deletions(-)
-        delete mode 100644 test_cube_match.adb",
-    );
-
-#    for (@tests) {
-#        update_from_git_pull ($_);
-#        say "Files changed: " . join (", ", @files_changed);
-#        if (needs_restart()) {
-#            say "Need restart.";
-#        }
-#        else {
-#            say "Don't need";
-#        }
-#        @files_changed = ();
-#    }
 }
 
 1;
