@@ -81,6 +81,54 @@ sub update_from_git_pull
     }
 }
 
+sub changes_this_week
+{
+    my $curr = time;
+    my $last_week = $curr - 60 * 60 * 24 * 7;
+
+    my @parts = localtime ($last_week);
+    my ($y, $m, $d) = @parts[5, 4, 3];
+    $y += 1900;
+    $m += 1;
+    if ($m < 10) { $m = "0$m"; }
+    if ($d < 10) { $d = "0$d"; }
+
+    my $nice = "$y-$m-$d";
+
+    return changes_since ($nice) . " last 7 days.";
+}
+
+sub changes_since
+{
+    my ($latest) = @_;
+
+    my $txt = `git log --shortstat --date=short`;
+
+    my $added = 0;
+    my $deleted = 0;
+
+    while ($txt =~ /commit\s*.*\n
+                Author:\s*.*\n
+                Date:\s*(.*)\n                  # (1) Date
+                \s*
+                .*\n
+                \s*
+                  \d+\sfiles\schanged,
+                  \s(\d+)\sinsertions\Q(+)\E,   # (2) Lines added
+                  \s(\d+)\sdeletions\Q(-)\E     # (3) Lines deleted
+                \s*
+            /xig)
+    {
+        my $date = $1;
+        if ($date lt $latest) { last; }
+
+        $added += $2;
+        $deleted += $3;
+    }
+
+    return "$added added and $deleted lines deleted";
+}
+
 sub test_update_src
 {
     update_from_git_pull(

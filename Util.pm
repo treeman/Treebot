@@ -41,7 +41,7 @@ sub format_time
 {
     my ($time) = @_;
 
-    my @parts = gmtime($time);
+    my @parts = localtime($time);
     my ($d, $h, $m, $s) = @parts[7, 2, 1, 0];
 
     my $msg;

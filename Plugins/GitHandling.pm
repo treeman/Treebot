@@ -22,6 +22,9 @@ class GitHandling extends DefaultPlugin
                 my $head = Git::head();
                 Irc::send_privmsg ($target, "Latest commit: $head");
             }
+            elsif ($arg eq "impact") {
+                Irc::send_privmsg ($target, Git::changes_this_week());
+            }
         }
     }
 
