@@ -1,20 +1,23 @@
 ﻿# Command line options
--t --test
+--test -t
     Load test run. Don't connect through socket but load plugins at startup.
 --dry
-    Dry run. Don't connect through socket and don't load plugins. Otherwise act normally. Used for testing through stdin.
+    Dry run. Don't connect through socket and don't load plugins.
+    Otherwise act normally. Used for testing through stdin.
 --run-tests
     Run test cases.
--v --verbose
+--verbose -v
     Log everything to files and stdout.
 --log-verbose
     Stdout normally but log everything to file.
--b --bare
+--bare -b
     Only log the bare essentials, strip everything else.
--B --show_bare
+--show_bare -B
     Log normally but verbose logging to stdout.
--d --daemon
+--daemon -d
     Start as daemon
+--no_show
+    Don't log anything to stdout
 
 # Todo
 *Better return handling for plugin handling
@@ -31,6 +34,11 @@
     Otherwise bind to join
     Store/Retrieve from file on startup/shutdown
 *Anti flood when sending a lot of info
+*torrent
+    Add option to list all torrents (without flooding)
+    Add option to remove individual torrent
+    Add total upload/download
+    Add individual torrent stat
 
 # Bugs
 *^C hangs on stdin getline, quits after enter (only sometimes?)
@@ -65,6 +73,7 @@
     commands for loading/unloading/reloading plugins dynamically!
     commands for checking what's loaded and what's possible to load
 *status
+*torrent handling
 *undocumented_cmds
 *uptime
 *restart

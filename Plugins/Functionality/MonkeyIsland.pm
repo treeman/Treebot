@@ -2,7 +2,9 @@
 
 use Modern::Perl;
 
-our %mi1 = (
+package MI;
+
+my %monkey_island1 = (
     "This is the END for you, you gutter-crawling cur!" =>
     "And I've got a little TIP for you, get the POINT?",
 
@@ -52,7 +54,7 @@ our %mi1 = (
     "I'm glad to hear you attended your family reunion.",
 );
 
-our %sword_master = (
+my %sword_master = (
     "I've got a long, sharp lesson for you you to learn today." =>
     "And I've got a little TIP for you. Get the POINT?",
 
@@ -105,7 +107,7 @@ our %sword_master = (
     "Even BEFORE they smell your breath? ",
 );
 
-our %mi3 = (
+my %monkey_island3 = (
     "Every enemy I have met, I've annihilated!" =>
     "With your breath, I'm sure they all suffocated.",
 
@@ -155,7 +157,7 @@ our %mi3 = (
     "Then be a good dog, Sit! Stay!",
 );
 
-our %captain_rottingham = (
+my %captain_rottingham = (
     "My attacks have left entire islands depopulated!" =>
     "With your breath, I'm sure they all suffocated.",
 
@@ -205,7 +207,7 @@ our %captain_rottingham = (
     "Then be a good dog, Sit! Stay!",
 );
 
-our %mi4 = (
+my %monkey_island4 = (
     "Today, by myself, twelve people I've beaten." =>
     "From the size of your gut I'd guess they were eaten.",
 
@@ -251,4 +253,74 @@ our %mi4 = (
     "Do I see quivers of agony dance on your lip?" =>
     "It's laughter that's caused by your feathery grip.",
 );
+
+my %insults =
+    (%monkey_island1, %sword_master,
+     %monkey_island3, %captain_rottingham, %monkey_island4);
+
+my @failed_retorts = (
+    "I am rubber, you are glue.",
+    "Oh yeah?",
+    "I'm shaking, I'm shaking!",
+    "Ok, I give up!",
+);
+
+sub get_random_insult
+{
+    return (keys %insults)[int rand keys %insults];
+}
+
+sub retort_to
+{
+    my ($insult) = @_;
+
+    my $retort;
+    my $shall_succeed = (rand() < 0.8);
+
+    if (defined ($retort = $monkey_island1{$insult})) {
+        if ($shall_succeed) {
+            return $retort;
+        }
+        else {
+            return $failed_retorts[rand @failed_retorts];
+        }
+    }
+    elsif (defined ($retort = $sword_master{$insult})) {
+        if ($shall_succeed) {
+            return $retort;
+        }
+        else {
+            return "That's not fair, you're using the Sword Master's insults!";
+        }
+    }
+    elsif (defined ($retort = $monkey_island3{$insult})) {
+        if ($shall_succeed) {
+            return $retort;
+        }
+        else {
+            return $failed_retorts[rand @failed_retorts];
+        }
+    }
+    elsif (defined ($retort = $captain_rottingham{$insult})) {
+        if ($shall_succeed) {
+            return $retort;
+        }
+        else {
+            return "That's not fair, you're using Captain Rottingham's insults!";
+        }
+    }
+    elsif (defined ($retort = $monkey_island4{$insult})) {
+        if ($shall_succeed) {
+            return $retort;
+        }
+        else {
+            return $failed_retorts[rand @failed_retorts];
+        }
+    }
+    else {
+        return "";
+    }
+}
+
+1;
 

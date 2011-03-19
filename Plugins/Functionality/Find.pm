@@ -95,6 +95,8 @@ sub missatsamtal
 }
 
 # This is huge, hacky and ugly...
+# But their site is a markup mess lacking concistency, and beauty.
+# Gotta love their generated html.
 sub hitta
 {
     my ($what) = @_;

@@ -1,7 +1,4 @@
 # Core
-*extensive testing
-    individual plugin tests
-    core testing
 *more command line params
 *more logging control
 *redirect error to logs
@@ -57,9 +54,7 @@
     only work with authed users?
     or store it in a temporary nick?
 *server handling
-    uptime
     ip
-    torrents
     usage
 *sc2casts
 *sc2ranks
