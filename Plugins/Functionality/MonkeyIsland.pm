@@ -280,10 +280,6 @@ sub retort_recieved
 {
     my ($retort) = @_;
 
-    #say "Retort recieved: $retort";
-    #say "Last insult: $last_insult";
-    #say "Comparing with: $insults{$last_insult}";
-
     # Escape regex meanings
     $retort =~ s/([.?])/\\\1/g;
 
@@ -294,6 +290,7 @@ sub retort_recieved
 
     # Finally match non case sensitive
     if ($last_insult and $insults{$last_insult} =~ /$retort/i) {
+        # Later on do something better here I guess
         return "Oh lala!";
     }
     else {
@@ -356,16 +353,16 @@ sub retort_to
 sub run_tests
 {
     $last_insult = "You make me want to puke.";
-    is (retort_recieved("You make me think somebody already did."), "Oh lala!",
+    ok (retort_recieved("You make me think somebody already did."),
         "Regular retort");
-    is (retort_recieved("You make me think somebody already did"), "Oh lala!",
+    ok (retort_recieved("You make me think somebody already did"),
         "Retort without ending dot");
 
     $last_insult = "I will milk every drop of blood from your body!";
-    is (retort_recieved("How aPpRopriatE. yOu fight like a Cow."),
-        "Oh lala!", "Case insensitive + dot in the middle retort");
-    isnt (retort_recieved("How appropriates You fight like a cow"),
-        "Oh lala!", "Dot only matches dot");
+    ok (retort_recieved("How aPpRopriatE. yOu fight like a Cow."),
+        "Case insensitive + dot in the middle retort");
+    ok (!retort_recieved("How appropriates You fight like a cow"),
+        "Dot only matches dot");
 }
 
 1;
