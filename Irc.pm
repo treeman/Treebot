@@ -143,16 +143,16 @@ my @core_cmds = ('cmds',
                  'help');
 my @core_undoc_cmds = ();
 my @core_admin_cmds = ('admin_cmds',
-                       'available',
-                       'load',
-                       'load_all',
-                       'loaded',
+                       #'available',
+                       #'load',
+                       #'load_all',
+                       #'loaded',
                        'quit',
-                       'reload',
-                       'reload_all',
+                       #'reload',
+                       #'reload_all',
                        'restart',
-                       'unload',
-                       'unload_all',
+                       #'unload',
+                       #'unload_all',
                        'update',
                       );
 
@@ -602,11 +602,17 @@ sub process_admin_cmd
         send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "update") {
-        say "updating!";
         Git::update_src ($target);
-        if (Git::needs_restart()) {
+
+        if (Git::outside_changes()) {
+            send_privmsg ($target, "Pulled from the outside.");
+            send_privmsg ($target, "We're looking like Windows update here, brb.");
+            main::restart ("Updating...");
+        }
+        elsif (Git::needs_restart()) {
             my $msg = "Files changed: " . join(", ", Git::files_changed());
             send_privmsg ($target, $msg);
+            send_privmsg ($target, "We're looking like Windows update here, brb.");
             main::restart ("Updating...");
         }
         else {

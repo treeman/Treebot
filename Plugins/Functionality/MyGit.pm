@@ -22,6 +22,12 @@ sub files_changed
     return @files_changed;
 }
 
+sub outside_changes
+{
+    my $curr_head = `git rev-parse HEAD`;
+    return $head != $curr_head;
+}
+
 sub needs_restart
 {
     my @core;
@@ -32,21 +38,8 @@ sub needs_restart
             push (@core, $1);
         }
     }
-    if (scalar @core) {
-        return 1;
-    }
 
-    my $curr_head = `git rev-parse HEAD`;
-    if ($head != $curr_head) {
-        return 1;
-    }
-
-    return 0;
-}
-
-sub check_activity
-{
-
+    return scalar @core;
 }
 
 sub update_src
