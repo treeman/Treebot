@@ -4,6 +4,8 @@ use Modern::Perl;
 
 package MI;
 
+use Test::More;
+
 my %monkey_island1 = (
     "This is the END for you, you gutter-crawling cur!" =>
     "And I've got a little TIP for you, get the POINT?",
@@ -265,9 +267,38 @@ my @failed_retorts = (
     "Ok, I give up!",
 );
 
+my $last_insult :shared;
+
 sub get_random_insult
 {
-    return (keys %insults)[int rand keys %insults];
+    my $insult = (keys %insults)[int rand keys %insults];
+    $last_insult = $insult;
+    return $insult;
+}
+
+sub retort_recieved
+{
+    my ($retort) = @_;
+
+    #say "Retort recieved: $retort";
+    #say "Last insult: $last_insult";
+    #say "Comparing with: $insults{$last_insult}";
+
+    # Escape regex meanings
+    $retort =~ s/([.?])/\\\1/g;
+
+    # Ending dot isn't mandatory
+    if ($retort =~ /\.$/) {
+        $retort = "$retort?";
+    }
+
+    # Finally match non case sensitive
+    if ($last_insult and $insults{$last_insult} =~ /$retort/i) {
+        return "Oh lala!";
+    }
+    else {
+        return "";
+    }
 }
 
 sub retort_to
@@ -320,6 +351,21 @@ sub retort_to
     else {
         return "";
     }
+}
+
+sub run_tests
+{
+    $last_insult = "You make me want to puke.";
+    is (retort_recieved("You make me think somebody already did."), "Oh lala!",
+        "Regular retort");
+    is (retort_recieved("You make me think somebody already did"), "Oh lala!",
+        "Retort without ending dot");
+
+    $last_insult = "I will milk every drop of blood from your body!";
+    is (retort_recieved("How aPpRopriatE. yOu fight like a Cow."),
+        "Oh lala!", "Case insensitive + dot in the middle retort");
+    isnt (retort_recieved("How appropriates You fight like a cow"),
+        "Oh lala!", "Dot only matches dot");
 }
 
 1;

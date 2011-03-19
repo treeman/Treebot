@@ -20,8 +20,17 @@ class Insults extends DefaultPlugin
 
     override process_privmsg ($sender, $target, $msg)
     {
-        my $retort = MI::retort_to ($msg);
-        Irc::send_privmsg ($target, $retort);
+        if (my $retort = MI::retort_to ($msg)) {
+            Irc::send_privmsg ($target, $retort);
+        }
+        elsif (my $msg = MI::retort_recieved ($msg)) {
+            Irc::send_privmsg ($target, $msg);
+        }
+    }
+
+    override run_tests ()
+    {
+        MI::run_tests();
     }
 }
 
