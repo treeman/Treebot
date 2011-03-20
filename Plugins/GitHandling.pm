@@ -31,10 +31,13 @@ class GitHandling extends DefaultPlugin
     override cmd_help ($cmd)
     {
         if ($cmd eq "git") {
-            return "Supported cmds: commit";
+            return "Supported cmds: head impact";
         }
         elsif ($cmd eq "git head") {
             return "Show current commit.";
+        }
+        elsif ($cmd eq "git impact") {
+            return "How active have I been?.";
         }
     }
 }
