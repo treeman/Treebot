@@ -78,7 +78,7 @@ sub update_from_git_pull
 sub changes_this_week
 {
     my $curr = time;
-    my $last_week = $curr - 60 * 60 * 24 * 7;
+    my $last_week = $curr - 60 * 60 * 24 * 6; # 6 + today
 
     my @parts = localtime ($last_week);
     my ($y, $m, $d) = @parts[5, 4, 3];
@@ -89,7 +89,7 @@ sub changes_this_week
 
     my $nice = "$y-$m-$d";
 
-    return changes_since ($nice) . " last 7 days.";
+    return changes_since ($nice) . ", last 7 days.";
 }
 
 sub changes_since
@@ -120,7 +120,7 @@ sub changes_since
         $deleted += $3;
     }
 
-    return "$added lines added and $deleted deleted";
+    return "+$added -$deleted";
 }
 
 sub test_update_src
