@@ -20,13 +20,11 @@
     Don't log anything to stdout
 
 # Todo
+*Correctly reload plugin classes
 *Better return handling for plugin handling
     For "_all" commands return how many plugins were affected
     Log error if something bad happens and better returning messages
     If nothing is loaded show a message
-*Git pull from <somewhere>
-    Check if core files have changed or just plugins files, then reload or restart
-*Protect the other shared threadings perhaps? But perhaps they're fine where they are.
 *Refactor hardcoded cmd lists
 *Change logging level dynamically
 *Working tell
@@ -53,10 +51,15 @@
     force recheck when nick quits and joins
     follows nick change, check admin auth nick - not the normal one
     admin authed nicks set in config
+    pipe raw to server
+    send privmsg to location
+    exit/restart
+    part/join
 *botsnack
 *cmds for regular, admin, undoc
 *git
     current commit
+    impact last 7 days
 *hello
     supports different saluts
 *help
@@ -66,8 +69,10 @@
 *id
 *log
 *monkey island insults and retorts
+    responds to insults and it reacts to correct retort
 *nextep
 *plugins
+    **borked
     commands for loading/unloading/reloading plugins dynamically!
     commands for checking what's loaded and what's possible to load
 *status

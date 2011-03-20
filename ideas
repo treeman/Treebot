@@ -2,8 +2,6 @@
 *more command line params
 *more logging control
 *redirect error to logs
-*Pipe
-    Send straight to the server, so we can manipulate treebot across Irc
 *Log to user
     Ability to send all log messages to me, again so we can work with treebot across Irc
 *Change logging level on the fly
@@ -20,14 +18,10 @@
 *admin
     auto-op admins if we can
     kick/bann
-    pipe to server
     log to user
 *brainfuck
 *day9
 *eval
-*git
-    lines changed the last day/week/month (extract from git log -p <filename>)
-    pull master origin, or others
 *hackertop
 *karma
     tell karma
