@@ -74,6 +74,9 @@ class Stuff extends DefaultPlugin
         elsif ($cmd eq "who") {
             Find::number ($arg);
         }
+        elsif ($cmd eq "bnet") {
+            Irc::send_privmsg ($target, "bnet 2.0: so good you won't want lan.");
+        }
     }
 
     override process_admin_cmd ($sender, $target, $cmd, $arg)

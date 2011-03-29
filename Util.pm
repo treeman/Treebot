@@ -79,8 +79,8 @@ sub post_space_str
 
     # For some reason it doesn't count these chars as it should. Simple workaround.
     my $botch = $str;
-    #$botch =~ s/(ä|ö|å)/x/g;
-    $botch =~ s/[^[:ascii:]]/x/g;
+    $botch =~ s/(ä|ö|å)/x/g;
+    #$botch =~ s/[^[:ascii:]]/x/g;
     my $spaces = $min - length ($botch);
     return $str . " " x $spaces;
 }
@@ -95,6 +95,13 @@ sub lc_se
     $txt =~ s/(Å|Ä|Ö)/$map{$1}/g;
     #$txt =~ s/[^[:ascii:]]//g;
     return $txt;
+}
+
+sub crude_remove_html
+{
+    my ($arg) = @_;
+    $arg =~ s/<[^>]+>//g;
+    return $arg;
 }
 
 1;
