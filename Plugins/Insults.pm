@@ -12,6 +12,11 @@ use MonkeyIsland;
 
 class Insults extends DefaultPlugin
 {
+    override cmds
+    {
+        return qw(mi_insult);
+    }
+
     override process_cmd ($sender, $target, $cmd, $args)
     {
         if ($cmd eq "mi_insult") {
@@ -28,6 +33,13 @@ class Insults extends DefaultPlugin
         }
         elsif (my $msg = MI::retort_recieved ($msg)) {
             Irc::send_privmsg ($target, $msg);
+        }
+    }
+
+    override cmd_help ($cmd)
+    {
+        if ($cmd eq "mi_insult") {
+            return "Launch a terrifying insult!";
         }
     }
 
