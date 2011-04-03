@@ -1,5 +1,8 @@
 #!/usr/bin/perl
 
+use utf8;
+use locale;
+
 use Modern::Perl;
 use Test::More;
 
@@ -30,7 +33,8 @@ class Stuff extends DefaultPlugin
     override undocumented_cmds
     {
         return qw(pew
-                  src);
+                  src
+                  bnet);
     }
 
     override admin_cmds
@@ -71,9 +75,9 @@ class Stuff extends DefaultPlugin
         elsif ($cmd =~ /^src|source$/) {
             Irc::send_privmsg ($target, "http://github.com/treeman/Treebot");
         }
-        elsif ($cmd eq "who") {
-            Find::number ($arg);
-        }
+        #elsif ($cmd eq "who") {
+        #    Find::number ($arg);
+        #}
         elsif ($cmd eq "bnet") {
             Irc::send_privmsg ($target, "bnet 2.0: so good you won't want lan.");
         }

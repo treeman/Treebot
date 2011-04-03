@@ -1,10 +1,12 @@
 #!/usr/bin/perl -w
 
+use utf8;
+use locale;
+
 package Util;
 
 use Modern::Perl;
-use utf8;
-use locale;
+use Test::More;
 
 sub remove_matches
 {
@@ -37,6 +39,72 @@ sub get_month_num {
     return $months{$m};
 }
 
+sub date_help
+{
+    return "Insert a common date id please. Example: today, 19140104 or 3/12";
+}
+
+# Return as YYYYMMDD
+# If it fails return undef
+sub parse_as_date
+{
+    my ($s) = @_;
+
+    if ($s =~ /^today$/i) {
+        return make_date (time);
+    }
+    elsif ($s =~ /^tomorrow$/i) {
+        return make_date (time + 60 * 60 * 24);
+    }
+    elsif ($s =~ /^yesterday$/i) {
+        return make_date (time - 60 * 60 * 24);
+    }
+    elsif ($s =~ /^\d{8}$/) {
+        return $s;
+    }
+    elsif ($s =~ /^\d{6}$/) {
+        return "20$s";
+    }
+    elsif ($s =~ /(\d)\/(\d)\s+(\d+)/) {
+        my ($d, $m, $y) = ($1, $2, $3);
+
+        if ($y < 1000) { $y = "20$y"; }
+        if ($m < 10) { $m = "0$m"; }
+        if ($d < 10) { $d = "0$d"; }
+
+        return "$y$m$d";
+    }
+    elsif ($s =~ /(\d)\/(\d)/) {
+        my ($d, $m) = ($1, $2);
+        my ($y) = (localtime(time))[5];
+        $y += 1900;
+
+        if ($m < 10) { $m = "0$m"; }
+        if ($d < 10) { $d = "0$d"; }
+
+        return "$y$m$d";
+    }
+    else {
+        return undef;
+    }
+}
+
+# Need a better name
+# Transform time to the format YYYYMMDD
+sub make_date
+{
+    my ($t) = @_;
+
+    my ($y, $m, $d) = (localtime($t))[5, 4, 3];
+    $y += 1900;
+    $m += 1;
+    if ($m < 10) { $m = "0$m"; }
+    if ($d < 10) { $d = "0$d"; }
+
+    return "$y$m$d";
+}
+
+# Need a better name
 sub format_time
 {
     my ($time) = @_;
@@ -102,6 +170,29 @@ sub crude_remove_html
     my ($arg) = @_;
     $arg =~ s/<[^>]+>//g;
     return $arg;
+}
+
+sub date_test
+{
+    is (parse_as_date ("20100102"), "20100102", "simple parse_as_date");
+    is (parse_as_date ("890104"), "20890104", "shorter date");
+    is (parse_as_date ("89"), undef, "undef");
+
+    like (parse_as_date ("today"), qr/\d{8}/, "today");
+    like (parse_as_date ("tomorrow"), qr/\d{8}/, "tomorrow");
+    like (parse_as_date ("yesterday"), qr/\d{8}/, "yesterday");
+
+    my $today = parse_as_date ("today");
+    my $tomorrow = parse_as_date ("tomorrow");
+    my $yesterday = parse_as_date ("yesterday");
+
+    is ($today - $tomorrow, -1, "today - tomorrow");
+    is ($today - $yesterday, 1, "today - yesterday");
+    is ($tomorrow - $yesterday, 2, "tomorrow - yesterday");
+
+    is (parse_as_date ("3/4"), "20110403", "day month");
+    is (parse_as_date ("3/4 03"), "20030403", "day month short year");
+    is (parse_as_date ("3/4 1903"), "19030403", "day month long year");
 }
 
 1;

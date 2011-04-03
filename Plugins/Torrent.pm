@@ -1,5 +1,8 @@
 #!/usr/bin/perl
 
+use utf8;
+use locale;
+
 use Modern::Perl;
 use Test::More;
 use MooseX::Declare;

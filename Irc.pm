@@ -1,5 +1,8 @@
 #!/usr/bin/perl -w
 
+use utf8;
+use locale;
+
 package Irc;
 
 use Modern::Perl;
