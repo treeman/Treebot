@@ -37,6 +37,14 @@
     Add option to remove individual torrent
     Add total upload/download
     Add individual torrent stat
+*pokedex
+    Add number/name lookup, with some info
+    Fix out of bounds random pokemon num bug
+*Irc.pm
+    Remove random regex parsings and abstract away
+    Some more abstraction in places would make it a bit cleaner I guess?
+*mi insults retorts
+    Do something more when you give a successful retort
 
 # Bugs
 *^C hangs on stdin getline, quits after enter (only sometimes?)
@@ -55,6 +63,7 @@
     send privmsg to location
     exit/restart
     part/join
+    auto op admins (and others) if we can
 *botsnack
 *cmds for regular, admin, undoc
 *git
@@ -75,8 +84,14 @@
     **borked
     commands for loading/unloading/reloading plugins dynamically!
     commands for checking what's loaded and what's possible to load
+*pokedex
+    not much functionality yet
+*quotes
+    duke, duke3d, dnf
 *status
 *torrent handling
+*train - rename to sj?
+    lookup SJ trains
 *undocumented_cmds
 *uptime
 *restart

@@ -681,6 +681,7 @@ my %pokedex = (%kanto, %johto, %hoenn, %sinnoh, %unova);
 
 sub random_pokemon
 {
+    # This is a bit bugged, it spews out bigger numbers?
     my $num = int rand keys %pokedex;
 
     if ($num < 100) { $num .= "0"; }

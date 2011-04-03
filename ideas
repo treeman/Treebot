@@ -16,7 +16,6 @@
 *activity
     how much the bot has been used
 *admin
-    auto-op admins if we can
     kick/bann
     log to user
 *brainfuck
@@ -36,7 +35,6 @@
 *madeoftree
 *manage topic
 *manga
-*pokedex
 *polls
 *prenumeration of events
     ie. Day9, mangas, animes, twitter, torrent completion (admin) etc..
@@ -54,9 +52,6 @@
 *sc2ranks
 *sc2 live vod tracker
     Interesting: Huk, Morrow, Grubby, Idra, day9, tyler... Probably many more but it's a start
-*sj
-    train on time?
-    http://www.sj.se/sj/jsp/polopoly.jsp?d=4597&l=sv
 *slap
 *tell
     tell a user something when he comes online
@@ -66,6 +61,6 @@
 *insult/compliment
     Monkey Island toplists
 *quotes
-    Duke
     Monkey Island
+    Wikiquote - qotd
 
