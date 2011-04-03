@@ -19,7 +19,8 @@ class Probe extends DefaultPlugin
     override cmds
     {
         return qw(down?
-                  whois?);
+                  whois?
+                  train);
     }
 
     override process_cmd ($sender, $target, $cmd, $arg)
