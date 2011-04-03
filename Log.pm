@@ -41,7 +41,7 @@ sub plugin { store ("~ ", @_); }
 sub file { store ("\$ ", @_); }
 sub exe { store ("* ", @_); }
 sub it { store ("? ", @_); }
-sub debug { store ("£ ", @_) if $debug; }
+sub debug { store ("+ ", @_) if $debug; }
 
 sub store
 {

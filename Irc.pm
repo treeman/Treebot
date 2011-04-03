@@ -130,7 +130,9 @@ my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
 
 # Current nick we're running
-my $botnick :shared;
+my $botnick :shared = "";
+# Channels we're op on
+my %channel_op :shared;
 
 # Command-line flags
 my $dry :shared;
@@ -411,7 +413,7 @@ sub process_irc_msg
     # First check for cmds without caring for freeze
 
     # Nick is authed
-    if ($irc_cmd =~ /330/) {
+    if ($irc_cmd eq "330") {
         $param =~ /^\S+\s+(\S+)\s+(\S+)/;
         my $nick = $1;
         my $authed_nick = $2;
@@ -420,9 +422,17 @@ sub process_irc_msg
 
         $authed_nicks{$nick} = $authed_nick;
         $nick_lock->up();
+
+        for (@Conf::admins) {
+            if ($authed_nick eq $_) {
+                for (keys %channel_op) {
+                    send_msg ("MODE $_ +o $nick");
+                }
+            }
+        }
     }
     # End of whois
-    elsif ($irc_cmd =~ /318/) {
+    elsif ($irc_cmd eq "318") {
         $param =~ /^\S+\s+(\S+)/;
         my $nick = $1;
 
@@ -435,7 +445,7 @@ sub process_irc_msg
         $nick_lock->up();
     }
     elsif ($irc_cmd =~ /QUIT|PART/) {
-        $prefix =~ /^(.+?)!~/;
+        $prefix =~ /^(.+?)!/;
         my $nick = $1;
 
         $nick_lock->down();
@@ -446,22 +456,23 @@ sub process_irc_msg
         }
         $nick_lock->up();
     }
-    elsif ($irc_cmd =~ /JOIN/) {
-        $prefix =~ /^(.+?)!~/;
+    elsif ($irc_cmd eq "JOIN") {
+        $prefix =~ /^(.+?)!/;
         my $nick = $1;
 
         if ($nick eq $botnick) { return };
 
         $nick_lock->down();
-
         # If we have an entry of this fellaw, undef it so we must check it again
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = undef;
         }
         $nick_lock->up();
+
+        send_msg "WHOIS $nick";
     }
-    elsif ($irc_cmd =~ /NICK/) {
-        $prefix =~ /^(.+?)!~/;
+    elsif ($irc_cmd eq "NICK") {
+        $prefix =~ /^(.+?)!/;
         my $old_nick = $1;
 
         $param =~ /^:(.*)/;
@@ -476,6 +487,18 @@ sub process_irc_msg
             $authed_nicks{$old_nick} = undef;
         }
         $nick_lock->up();
+    }
+    elsif ($irc_cmd eq "MODE") {
+        my ($channel, $mode, $nick) = split (/ /, $param);
+
+        if ($nick eq $botnick) {
+            if ($mode =~ /\+o/) {
+                $channel_op{$channel} = 1;
+            }
+            elsif ($mode =~ /-o/) {
+                $channel_op{$channel} = 0;
+            }
+        }
     }
 
     release_freeze ($irc_cmd);
@@ -502,7 +525,7 @@ sub process_privmsg
         my $target = $1;
         my $msg = $2;
 
-        $prefix =~ /^(.+?)!~/;
+        $prefix =~ /^(.+?)!/;
         my $sender = $1;
 
         # Ignore clones of ourselves
@@ -666,6 +689,19 @@ sub process_admin_cmd
         my $list = join (", ", @plugins);
         send_privmsg ($target, $list);
     }
+    elsif ($cmd eq "is_op") {
+        if ($target =~ /^#/) {
+            if ($channel_op{$target}) {
+                send_privmsg ($target, "Yes I'm op.");
+            }
+            else {
+                send_privmsg ($target, "No I'm not :/");
+            }
+        }
+        else {
+            send_privmsg ($target, "I'm opping this conversation!!");
+        }
+    }
     else {
         Plugin::process_admin_cmd ($sender, $target, $cmd, $arg);
     }
@@ -821,7 +857,7 @@ sub start
 
         # If we don't know if the nick is auth or not, we need to check it
         # freeze until WHOIS returns
-        if (has_connected() && $input =~ /^:(\S+)!~\S* (?:PRIVMSG|JOIN|PART|QUIT)/) {
+        if (has_connected() && $input =~ /^:(\S+)!\S* (?:PRIVMSG|JOIN|PART|QUIT)/) {
             my $nick = $1;
 
             next if $nick eq $botnick;
@@ -928,12 +964,13 @@ sub recheck_nick
             send_msg "WHOIS $nick";
             $whois_sent = 1;
             freeze_until ('318');
-            sleep 1;
+
             threads::yield();
+            sleep 1;
         }
         else {
-            sleep 1;
             threads::yield();
+            sleep 1;
         }
     }
 }
@@ -1030,7 +1067,6 @@ sub release_freeze
     if ($freeze_until_code{$cmd}) {
         for my $msg (@{$freeze_until_code{$cmd}}) {
             if ($msg) {
-                say $msg;
                 $in_queue->enqueue ($msg);
             }
         }
@@ -1097,6 +1133,11 @@ sub run_pre_login_tests
     like(".cmd arg", $match_cmd, "arg command");
     like(".cmd arg1 arg2", $match_cmd, "args command");
     unlike("cmd", $match_cmd, "bare command");
+
+    ":fluffaloot!Fluffalot\@h-61-66.A163.priv.bahnhof.se PRIVMSG #theobald :hej"
+        =~ $match_irc_msg;
+    is($1, "fluffaloot!Fluffalot\@h-61-66.A163.priv.bahnhof.se", "fluff nick");
+    is($3, "hej", "fluff msg");
 
     like(":ser12_232:d2 CODEZ0R #pe arg1 arg2 :last", $match_irc_msg, "irc msg args");
     like(":server IPP treebot :l", $match_irc_msg, "simple");
