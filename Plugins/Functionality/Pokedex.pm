@@ -691,7 +691,7 @@ sub random_pokemon
     return "#$num $name";
 }
 
-sub num
+sub pokedex_size
 {
     return 649;
 }
