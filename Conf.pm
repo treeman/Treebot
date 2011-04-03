@@ -18,8 +18,8 @@ our @nick_reserves = qw(treebot_
                         treebot2000
                         treestbot);
 
-our @channels = qw(#madeoftree
-                   #theobald);
+our @channels = ('#madeoftree',
+                 '#theobald');
 
 our $cmd_prefix = ".";
 

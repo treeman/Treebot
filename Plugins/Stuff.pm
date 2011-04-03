@@ -13,6 +13,7 @@ use Plugin;
 use Conf;
 use Util;
 use Find;
+use Pokedex;
 
 class Stuff extends DefaultPlugin
 {
@@ -27,7 +28,8 @@ class Stuff extends DefaultPlugin
                   botsnack
                   status
                   uptime
-                  hello);
+                  hello
+                  pokédex);
     }
 
     override undocumented_cmds
@@ -75,11 +77,18 @@ class Stuff extends DefaultPlugin
         elsif ($cmd =~ /^src|source$/) {
             Irc::send_privmsg ($target, "http://github.com/treeman/Treebot");
         }
-        #elsif ($cmd eq "who") {
-        #    Find::number ($arg);
-        #}
         elsif ($cmd eq "bnet") {
             Irc::send_privmsg ($target, "bnet 2.0: so good you won't want lan.");
+        }
+        elsif ($cmd =~ /pok[eé]dex/) {
+            if ($arg eq "random") {
+                my $msg = Poke::random_pokemon();
+                Irc::send_privmsg ($target, $msg);
+            }
+            else {
+                my $num = Poke::pokedex_size();
+                Irc::send_privmsg ($target, "We know $num pokémons!");
+            }
         }
     }
 
