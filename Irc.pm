@@ -423,7 +423,8 @@ sub process_irc_msg
         $authed_nicks{$nick} = $authed_nick;
         $nick_lock->up();
 
-        for (@Conf::admins) {
+        my @to_op = (@Conf::admins, @Conf::auto_op);
+        for (@to_op) {
             if ($authed_nick eq $_) {
                 for (keys %channel_op) {
                     send_msg ("MODE $_ +o $nick");
@@ -469,6 +470,7 @@ sub process_irc_msg
         }
         $nick_lock->up();
 
+        # Recheck nick
         send_msg "WHOIS $nick";
     }
     elsif ($irc_cmd eq "NICK") {

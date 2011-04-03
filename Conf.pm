@@ -14,9 +14,12 @@ our $nick = "treebot";
 our $username = "treebot";
 our $realname = "Random Hacks Robot";
 
-our @nick_reserves = ('treebot_', 'treebot2000', 'treestbot');
+our @nick_reserves = qw(treebot_
+                        treebot2000
+                        treestbot);
 
-our @channels = ('#madeoftree', '#theobald');
+our @channels = qw(#madeoftree
+                   #theobald);
 
 our $cmd_prefix = ".";
 
@@ -24,7 +27,10 @@ our $log_dir = "logs/";
 our $log_ping = 0;
 our $log_pong = 0;
 
-our @admins = ('Mowah');
+# Access to admin cmds
+our @admins = qw(Mowah);
+# Auto op
+our @auto_op = qw(Firekite);
 
 # Trailing / important
 our $plugin_folder = "Plugins/";
