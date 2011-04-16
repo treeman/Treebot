@@ -47,7 +47,7 @@ class Quotes extends DefaultPlugin
             return "Come get some!";
         }
         elsif ($cmd eq "dnf") {
-            return "Girl: What about the game Duke? Was it any good? Duke: Yeah, but after 12 fucking years it should be!";
+            return "Girl: What about the game Duke? Was it any good?\nDuke: Yeah, but after 12 fucking years it should be!";
         }
     }
 

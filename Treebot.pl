@@ -53,8 +53,18 @@ if ($run_tests) {
     $no_show = 1;
 }
 
-# register SIGINT failure for cleanup
-$SIG{INT} = \&quit;
+sub sigfault
+{
+    my $sig = shift;
+    Log::error ("SIG$sig caught $!");
+    quit();
+}
+
+# register fatal signals failure for cleanup
+$SIG{INT} = \&sigfault;
+$SIG{HUP} = \&sigfault;
+$SIG{TERM} = \&sigfault;
+$SIG{QUIT} = \&sigfault;
 
 if ($daemonize) {
     daemonize();

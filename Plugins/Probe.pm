@@ -113,7 +113,7 @@ class Probe extends DefaultPlugin
             return "Got an unknown number? I'm here to help.";
         }
         elsif ($cmd eq "train") {
-            return "Check an SJ train: [date] train-id station. Example: train 8647 linköping. Will return 'arrival, departure'.";
+            return "Check an SJ train: [date] train-id station.\nExample: train 8647 linköping. Will return 'arrival, departure'.";
         }
     }
 
