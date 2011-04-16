@@ -52,6 +52,7 @@ sub test_out;
 # Format and send a string to the server
 sub send_msg;
 # Send a PRIVMSG to the server
+# Will split at newlines and will send it as several messages
 sub send_privmsg;
 
 # When we've recieved a message
@@ -320,12 +321,16 @@ sub send_privmsg
 {
     my ($target, $msg) = @_;
 
-    # If target is empty it's to the commandline
-    if ($target eq "") {
-        Log::out $msg;
-    }
-    else {
-        send_msg "PRIVMSG $target :$msg";
+    for my $m (split(/\r\n|\n/, $msg)) {
+        if (length ($m) == 0) { next; }
+
+        # If target is empty it's to the commandline
+        if ($target eq "") {
+            Log::out $m;
+        }
+        else {
+            send_msg "PRIVMSG $target :$m";
+        }
     }
 }
 
