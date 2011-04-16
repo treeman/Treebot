@@ -25,7 +25,6 @@
     For "_all" commands return how many plugins were affected
     Log error if something bad happens and better returning messages
     If nothing is loaded show a message
-*Refactor hardcoded cmd lists
 *Change logging level dynamically
 *Working tell
     Must have a way of checking if a user is online or not
@@ -37,9 +36,6 @@
     Add option to remove individual torrent
     Add total upload/download
     Add individual torrent stat
-*pokedex
-    Add number/name lookup, with some info
-    Fix out of bounds random pokemon num bug
 *Irc.pm
     Remove random regex parsings and abstract away
     Some more abstraction in places would make it a bit cleaner I guess?
@@ -86,7 +82,9 @@
     commands for loading/unloading/reloading plugins dynamically!
     commands for checking what's loaded and what's possible to load
 *pokedex
-    not much functionality yet
+    random pokemon
+    lookup through numbers or pattern match their names
+    no info about them though, only names and numbers
 *quotes
     duke, duke3d, dnf
 *status

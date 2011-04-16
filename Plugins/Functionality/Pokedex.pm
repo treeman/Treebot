@@ -684,12 +684,63 @@ sub random_pokemon
     # This is a bit bugged, it spews out bigger numbers?
     my $num = int rand keys %pokedex;
 
-    if ($num < 100) { $num .= "0"; }
-    if ($num < 10) { $num .= "0"; }
+    if ($num < 100) { $num = "0" . $num ; }
+    if ($num < 10) { $num = "0" . $num; }
 
     my $name = $pokedex{$num};
 
     return "#$num $name";
+}
+
+sub pokemon_search
+{
+    my ($what) = @_;
+
+    if ($what =~ /^\d+$/) {
+        return pokemon_num ($what);
+    }
+    else {
+        return pokemon_name ($what);
+    }
+}
+
+sub pokemon_num
+{
+    my ($num) = @_;
+
+    if ($num < 100) { $num = "0" . $num ; }
+    if ($num < 10) { $num = "0" . $num; }
+
+    if ($num > 0 && $num < 650) {
+        return "$num $pokedex{$num}";
+    }
+    else {
+        return "Unknown";
+    }
+}
+
+sub pokemon_name
+{
+    my ($name) = @_;
+
+    my $close_match;
+    while (my ($key, $val) = each %pokedex) {
+        if ($val =~ /^\Q$name\E$/i) {
+            return "$key $val";
+        }
+        elsif ($val =~ /\Q$name\E/) {
+            $close_match = "$key $val";
+        }
+        elsif ($val =~ /\Q$name\E/i) {
+            $close_match = "$key $val" if !$close_match;
+        }
+    }
+    if ($close_match) {
+        return $close_match;
+    }
+    else {
+        return "Unknown";
+    }
 }
 
 sub pokedex_size

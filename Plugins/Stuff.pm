@@ -85,6 +85,10 @@ class Stuff extends DefaultPlugin
                 my $msg = Poke::random_pokemon();
                 Irc::send_privmsg ($target, $msg);
             }
+            elsif ($arg) {
+                my $msg = Poke::pokemon_search($arg);
+                Irc::send_privmsg ($target, $msg);
+            }
             else {
                 my $num = Poke::pokedex_size();
                 Irc::send_privmsg ($target, "We know $num pokémons!");
@@ -154,6 +158,9 @@ class Stuff extends DefaultPlugin
         }
         elsif ($cmd eq "hello") {
             return "I'll try to respond when you say hi to me.";
+        }
+        elsif ($cmd =~ /pok[eé]dex/) {
+            return "Peruse our pokédex of wonders!";
         }
     }
 
