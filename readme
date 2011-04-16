@@ -36,9 +36,6 @@
     Add option to remove individual torrent
     Add total upload/download
     Add individual torrent stat
-*Irc.pm
-    Remove random regex parsings and abstract away
-    Some more abstraction in places would make it a bit cleaner I guess?
 *mi insults retorts
     Do something more when you give a successful retort
 

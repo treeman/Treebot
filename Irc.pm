@@ -173,13 +173,19 @@ my @workers;
 # Regex parsing of useful stuff
 my $match_ping = qr/^PING\s(.*)$/i;
 
+my $is_cmd = qr/^\Q$Conf::cmd_prefix\E/;
 my $match_cmd =
     qr/
-        ^\Q$Conf::cmd_prefix\E  # cmd prefix
+        $is_cmd
         (\S*)                         # (1) cmd
         \s*
         (.*)                          # (2) args
     /x;
+
+my $match_raw_in = qr/^<\s+(.*)/;
+
+my $match_nick_prefix = qr/^(.+?)!/;
+my $match_privmsg_param = qr/^(\S+)\s:(.*)$/;
 
 my $match_irc_msg =
     qr/
@@ -207,11 +213,11 @@ sub stdin_listener
 {
     while(<STDIN>) {
         chomp $_;
-        if (/^\./) {
+        if ($_ =~ $is_cmd) {
             # We've recieved a command, it will be parsed in the $in_queue.
             push_in ($_);
         }
-        elsif (/^<\s*(.*)/) {
+        elsif ($_ =~ $match_raw_in) {
             # Act like we recieve it from the socket
             push_in ("$1\r\n");
         }
@@ -242,7 +248,7 @@ sub sock_listener
     my ($sock) = @_;
     while(my $input = read_sock($sock)) {
         # Prevent the server from being confused with our own input commands
-        if ($input =~ /^\Q$Conf::cmd_prefix\E/) {
+        if ($input =~ $is_cmd) {
             $input = "\\$input";
         }
         push_in ($input);
@@ -419,9 +425,7 @@ sub process_irc_msg
 
     # Nick is authed
     if ($irc_cmd eq "330") {
-        $param =~ /^\S+\s+(\S+)\s+(\S+)/;
-        my $nick = $1;
-        my $authed_nick = $2;
+        my ($bork, $nick, $authed_nick) = split(/\s+/, $param);
 
         $nick_lock->down();
 
@@ -439,8 +443,7 @@ sub process_irc_msg
     }
     # End of whois
     elsif ($irc_cmd eq "318") {
-        $param =~ /^\S+\s+(\S+)/;
-        my $nick = $1;
+        my ($bork, $nick) = split(/\s+/, $param);
 
         $nick_lock->down();
 
@@ -451,7 +454,7 @@ sub process_irc_msg
         $nick_lock->up();
     }
     elsif ($irc_cmd =~ /QUIT|PART/) {
-        $prefix =~ /^(.+?)!/;
+        $prefix =~ $match_nick_prefix;
         my $nick = $1;
 
         $nick_lock->down();
@@ -463,7 +466,7 @@ sub process_irc_msg
         $nick_lock->up();
     }
     elsif ($irc_cmd eq "JOIN") {
-        $prefix =~ /^(.+?)!/;
+        $prefix =~ $match_nick_prefix;
         my $nick = $1;
 
         if ($nick eq $botnick) { return };
@@ -479,7 +482,7 @@ sub process_irc_msg
         send_msg "WHOIS $nick";
     }
     elsif ($irc_cmd eq "NICK") {
-        $prefix =~ /^(.+?)!/;
+        $prefix =~ $match_nick_prefix;
         my $old_nick = $1;
 
         $param =~ /^:(.*)/;
@@ -498,7 +501,7 @@ sub process_irc_msg
     elsif ($irc_cmd eq "MODE") {
         my ($channel, $mode, $nick) = split (/ /, $param);
 
-        if ($nick eq $botnick) {
+        if ($nick && $nick eq $botnick) {
             if ($mode =~ /\+o/) {
                 $channel_op{$channel} = 1;
             }
@@ -528,11 +531,11 @@ sub process_privmsg
 {
     my ($prefix, $irc_cmd, $param) = @_;
 
-    if ($param =~ /^(\S+)\s:(.*)$/) {
+    if ($param =~ $match_privmsg_param) {
         my $target = $1;
         my $msg = $2;
 
-        $prefix =~ /^(.+?)!/;
+        $prefix =~ $match_nick_prefix;
         my $sender = $1;
 
         # Ignore clones of ourselves
@@ -862,11 +865,17 @@ sub start
             next;
         }
 
+        $input =~ $match_irc_msg;
+        my $nick = "";
+        if ($1) {
+            $1 =~ $match_nick_prefix;
+            $nick = $1;
+        }
+        my $cmd = $2;
+
         # If we don't know if the nick is auth or not, we need to check it
         # freeze until WHOIS returns
-        if (has_connected() && $input =~ /^:(\S+)!\S* (?:PRIVMSG|JOIN|PART|QUIT)/) {
-            my $nick = $1;
-
+        if (has_connected() && $cmd =~ /PRIVMSG|JOIN|PART|QUIT/ && $nick) {
             next if $nick eq $botnick;
 
             if (needs_recheck ($nick)) {
