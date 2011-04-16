@@ -74,6 +74,7 @@
 *help
     general help
     individual help messages
+*hn - list 5 first entries from front page
 *down? site
 *id
 *log
