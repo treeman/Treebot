@@ -53,18 +53,27 @@ if ($run_tests) {
     $no_show = 1;
 }
 
-sub sigfault
+sub graceful_kill
 {
     my $sig = shift;
-    Log::error ("SIG$sig caught $!");
-    quit();
+    Log::crash ("sig SIG$sig: $!");
+
+    for my $thr (threads->list()) {
+        $thr->detach();
+    }
+
+    Plugin::kill_all();
+
+    Log::crash ("Exiting");
+    exit;
 }
 
 # register fatal signals failure for cleanup
-$SIG{INT} = \&sigfault;
-$SIG{HUP} = \&sigfault;
-$SIG{TERM} = \&sigfault;
-$SIG{QUIT} = \&sigfault;
+$SIG{INT} = \&graceful_kill;
+$SIG{TERM} = \&graceful_kill;
+$SIG{QUIT} = \&graceful_kill;
+$SIG{STOP} = \&graceful_kill;
+$SIG{HUP} = \&graceful_kill;
 
 if ($daemonize) {
     daemonize();
@@ -91,7 +100,7 @@ sub quit
         $thr->detach();
     }
 
-    Plugin::unload_all();
+    Plugin::kill_all();
 
     if ($run_tests) {
         done_testing();

@@ -26,18 +26,27 @@ class TellUser extends DefaultPlugin
             my $nick = $1;
             my $what = $2;
 
-            Tell::tell_user ($nick, $sender, $what);
+            Tell::tell_user_from ($nick, $sender, $what);
+            Tell::issue_tell ($nick);
+        }
+        elsif ($cmd eq "messages") {
+            my @messages = Tell::shift_tell ($sender, Irc::authed_as ($sender));
+            if (scalar @messages) {
+                map { Irc::send_privmsg ($sender, $_); } @messages;
+            }
+            else {
+                Irc::send_privmsg ($sender, "Sorry no new messages.");
+            }
         }
         elsif ($cmd eq "tt") {
-            Tell::issue_tell ($arg);
+            #Tell::issue_tell ($arg);
         }
     }
 
     override process_irc_msg ($prefix, $cmd, $param)
     {
         if ($cmd eq "JOIN") {
-            $prefix =~ /^(.+?)!~/;
-            my $nick = $1;
+            my $nick = Irc::prefix_to_nick ($prefix);
 
             Tell::issue_tell ($nick);
         }

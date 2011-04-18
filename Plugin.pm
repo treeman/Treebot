@@ -71,6 +71,8 @@ sub load_all;
 sub unload_all;
 sub reload_all;
 
+sub kill_all;
+
 sub load;
 sub load_file;
 sub unload;
@@ -195,6 +197,17 @@ sub unload_all
         delete $plugins->{$name};
     }
     $lock->up();
+}
+
+sub kill_all
+{
+    while (my ($name, $plugin) = (each %{$plugins}))
+    {
+        my $file = resolve_filepath ($name);
+        Log::plugin ("Unloading $file without mercy!");
+
+        $plugin->unload();
+    }
 }
 
 sub reload_all

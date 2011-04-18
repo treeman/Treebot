@@ -102,7 +102,7 @@ sub is_admin;
 
 sub is_op;
 
-sub sender_to_nick;
+sub prefix_to_nick;
 
 # Block command handling when waiting for response from server
 sub shall_freeze;
@@ -440,16 +440,20 @@ sub process_irc_msg
         $online_nicks{$nick} = 0;
         $info_lock->up();
     }
+    # Whois user info
+    elsif ($irc_cmd eq "311") {
+        my ($bork, $nick) = split(/\s+/, $param);
+
+        # Meaning he's online
+        $info_lock->down();
+        $online_nicks{$nick} = 1;
+        $info_lock->up();
+    }
     # End of whois
     elsif ($irc_cmd eq "318") {
         my ($bork, $nick) = split(/\s+/, $param);
 
         $info_lock->down();
-
-        # If no entry, he's online as we set it to false if we get a no-nick response
-        if (!defined($online_nicks{$nick})) {
-            $online_nicks{$nick} = 1;
-        }
 
         # If no entry, he isn't authed
         if (!defined($authed_nicks{$nick})) {
@@ -471,7 +475,7 @@ sub process_irc_msg
 
         $info_lock->up();
     }
-    elsif ($irc_cmd =~ /QUIT|PART/) {
+    elsif ($irc_cmd eq "QUIT") {
         $prefix =~ $match_nick_prefix;
         my $nick = $1;
 
@@ -483,22 +487,31 @@ sub process_irc_msg
         }
         $info_lock->up();
     }
-    elsif ($irc_cmd eq "JOIN") {
+    elsif ($irc_cmd eq "PART") {
         $prefix =~ $match_nick_prefix;
         my $nick = $1;
+
+        $info_lock->down();
+        # Force recheck
+        delete $online_nicks{$nick};
+        if (exists($authed_nicks{$nick})) {
+            $authed_nicks{$nick} = undef;
+        }
+        $info_lock->up();
+    }
+    elsif ($irc_cmd eq "JOIN") {
+        my $nick = prefix_to_nick ($prefix);
 
         if ($nick eq $botnick) { return };
 
         $info_lock->down();
         $online_nicks{$nick} = 1;
+
         # If we have an entry of this fellaw, undef it so we must check it again
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = undef;
         }
         $info_lock->up();
-
-        # Recheck nick
-        send_msg "WHOIS $nick";
     }
     elsif ($irc_cmd eq "NICK") {
         $prefix =~ $match_nick_prefix;
@@ -557,8 +570,7 @@ sub process_privmsg
         my $target = $1;
         my $msg = $2;
 
-        $prefix =~ $match_nick_prefix;
-        my $sender = $1;
+        my $sender = prefix_to_nick ($prefix);
 
         # Ignore clones of ourselves
         if (is_authed ($sender)) {
@@ -1030,10 +1042,12 @@ sub authed_as
 {
     my ($nick) = @_;
 
-    recheck_nick ($nick);
-    $info_lock->down();
-    my $auth = $authed_nicks{$nick};
-    $info_lock->up();
+    my $auth = "";
+    if (is_authed ($nick)) {
+        $info_lock->down();
+        $auth = $authed_nicks{$nick};
+        $info_lock->up();
+    }
 
     return $auth;
 }
@@ -1064,6 +1078,17 @@ sub is_op
 {
     my ($target) = @_;
     return $channel_op{$target};
+}
+
+sub prefix_to_nick
+{
+    my ($prefix) = @_;
+    if ($prefix =~ $match_nick_prefix) {
+        return $1;
+    }
+    else {
+        return "";
+    }
 }
 
 sub shall_freeze

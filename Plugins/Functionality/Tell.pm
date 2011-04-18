@@ -17,88 +17,94 @@ my %nick_tell :shared;
 my %auth_tell :shared;
 my $lock = Thread::Semaphore->new();
 
+sub shift_tell
+{
+    my ($nick, $auth_nick) = @_;
+
+    my @msgs;
+
+    $lock->down();
+
+    if ($nick_tell{$nick}) {
+        for my $what (@{$nick_tell{$nick}}) {
+            push (@msgs, $what);
+        }
+        delete $nick_tell{$nick};
+    }
+
+    if ($auth_nick && $auth_tell{$auth_nick}) {
+        for my $what (@{$auth_tell{$auth_nick}}) {
+            push (@msgs, $what);
+        }
+        delete $auth_tell{$auth_nick};
+    }
+
+    $lock->up();
+
+    return @msgs;
+}
+
+# Actually send irc messages
 sub issue_tell
 {
     my ($nick) = @_;
 
-    $lock->down();
-
-    #if (Irc::is_authed ($nick)) {
-    if (1) {
-        #my $auth_nick = Irc::authed_as ($nick);
-        my $auth_nick = 'Mowah';
-
-        if ($auth_tell{$auth_nick}) {
-            for my $what (@{$auth_tell{$auth_nick}}) {
-                #Irc::send_privmsg ($nick, $what);
-                say $what;
-            }
-
-            delete $auth_tell{$auth_nick};
-        }
+    if (Irc::is_online ($nick)) {
+        map { Irc::send_privmsg ($nick, $_); }
+            Tell::shift_tell ($nick, Irc::authed_as ($nick));
     }
-
-    if ($nick_tell{$nick}) {
-        for my $what (@{$nick_tell{$nick}}) {
-            #Irc::send_privmsg ($nick, $what);
-            say $what;
-        }
-
-        delete $nick_tell{$nick};
-    }
-
-    $lock->up();
 }
 
-sub tell_user
+sub tell_user_from
 {
     my $to = shift;
     my $from = shift;
 
     if ($from) {
-        add_in_queue ($to, ("Message from $from:", @_));
+        tell_user ($to, "Message from $from:", @_);
     }
-
-    # No from message is from the bot itself
+    # Might happen if we tell through stdin
     else {
-        add_in_queue ($to, @_);
+        tell_user ($to, @_);
     }
+}
+
+sub tell_user
+{
+    my $nick = shift;
+    add_in_queue (\%nick_tell, $nick, @_);
+}
+
+sub tell_auth_from
+{
+    my $to = shift;
+    my $from = shift;
+    tell_auth ($to, "Message from $from:", @_);
+}
+
+sub tell_auth
+{
+    my $auth = shift;
+    add_in_queue (\%auth_tell, $auth, @_);
 }
 
 sub add_in_queue
 {
+    my $tells = shift;
     my $nick = shift;
     my @what = (@_);
 
     $lock->down();
 
-    #if (Irc::is_authed ($nick)) {
-    if (1) {
-        #my ($auth_nick) = Irc::authed_as ($nick);
-        my $auth_nick = 'Mowah';
-
-        if ($auth_tell{$auth_nick}) {
-            my @tell :shared;
-            @tell = (@{$auth_tell{$auth_nick}}, @what);
-            $auth_tell{$auth_nick} = \@tell;
-        }
-        else {
-            my @tell :shared;
-            @tell = @what;
-            $auth_tell{$auth_nick} = \@tell;
-        }
+    if ($$tells{$nick}) {
+        my @tell :shared;
+        @tell = (@{$$tells{$nick}}, @what);
+        $$tells{$nick} = \@tell;
     }
     else {
-        if ($nick_tell{$nick}) {
-            my @tell :shared;
-            @tell = (@{$nick_tell{$nick}}, @what);
-            $nick_tell{$nick} = \@tell;
-        }
-        else {
-            my @tell :shared;
-            @tell = @what;
-            $nick_tell{$nick} = \@tell;
-        }
+        my @tell :shared;
+        @tell = @what;
+        $$tells{$nick} = \@tell;
     }
 
     $lock->up();
