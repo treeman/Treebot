@@ -72,7 +72,6 @@ sub check_latest_manga
             if ($thr->is_joinable) {
                 my $info = $thr->join();
                 if (is_useful ($info)) {
-                    #print_manga(%info);
                     add_info ($info);
                 }
             }
@@ -95,6 +94,19 @@ sub get_latest
     update_info ($info, get_mangable_info ($manga));
 
     return $info;
+}
+
+sub get_latest_list
+{
+    my $manga = {};
+
+    for (@_) {
+        my $info = get_latest ($_);
+        if (scalar %$info) {
+            $manga->{$info->{"manga"}} = $info;
+        }
+    }
+    return $manga;
 }
 
 sub add_info
