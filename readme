@@ -38,6 +38,8 @@
     Add individual torrent stat
 *mi insults retorts
     Do something more when you give a successful retort
+*Refactor the online/authed nick checks
+    There's a lot of locking/unlocking and the meanings of the values are unclear
 
 # Bugs
 *^C hangs on stdin getline, quits after enter (only sometimes?)

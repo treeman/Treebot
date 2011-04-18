@@ -55,8 +55,6 @@ sub send_msg;
 # Will split at newlines and will send it as several messages
 sub send_privmsg;
 
-# When we've recieved a message
-sub recieve_msg;
 # Parse the recieved message
 sub parse_recieved;
 # Parse the message if we're not logged in
@@ -102,8 +100,11 @@ sub is_authed;
 sub authed_as;
 sub is_admin;
 
+sub is_op;
+
 sub sender_to_nick;
 
+# Block command handling when waiting for response from server
 sub shall_freeze;
 sub freeze_until;
 sub release_freeze;
@@ -122,14 +123,13 @@ sub run_post_login_tests;
 my $sock;
 my $sock_lock = Thread::Semaphore->new(2);
 
+my $in_queue = Thread::Queue->new();
+my $out_queue = Thread::Queue->new();
+
 my $has_connected :shared = 0;
 
 my %authed_nicks :shared;
 my %online_nicks :shared;
-my $nick_lock = Thread::Semaphore->new();
-
-my $in_queue = Thread::Queue->new();
-my $out_queue = Thread::Queue->new();
 
 # Current nick we're running
 my $botnick :shared = "";
@@ -140,6 +140,9 @@ my %channel_op :shared;
 my $dry :shared;
 my $test :shared;
 my $run_tests :shared;
+
+# A general lock for various simple shared variables
+my $info_lock = Thread::Semaphore->new();
 
 # Ability to freeze and wait for a response code, ex. wait for a WHOIS to end
 my %freeze_until_code :shared;
@@ -258,16 +261,12 @@ sub sock_listener
 
 sub push_in
 {
-    for (@_) {
-        $in_queue->enqueue ($_);
-    }
+    map { $in_queue->enqueue ($_); } @_;
 }
 
 sub push_out
 {
-    for (@_) {
-        $out_queue->enqueue ($_);
-    }
+    map { $out_queue->enqueue ($_); } @_;
 }
 
 sub socket_writer
@@ -316,7 +315,7 @@ sub send_msg
 {
     my $msg = join("", @_);
 
-    if (length ($msg) > 0 ) {
+    if (length ($msg) > 0) {
         push_out ($msg);
     }
     else {
@@ -339,11 +338,6 @@ sub send_privmsg
             send_msg "PRIVMSG $target :$m";
         }
     }
-}
-
-sub recieve_msg
-{
-    Log::recieved @_;
 }
 
 sub parse_recieved
@@ -428,16 +422,13 @@ sub process_irc_msg
     if ($irc_cmd eq "330") {
         my ($bork, $nick, $authed_nick) = split(/\s+/, $param);
 
-        $nick_lock->down();
+        $info_lock->down();
         $authed_nicks{$nick} = $authed_nick;
-        $nick_lock->up();
+        $info_lock->up();
 
-        my @to_op = (@Conf::admins, @Conf::auto_op);
-        for (@to_op) {
+        for (@Conf::admins, @Conf::auto_op) {
             if ($authed_nick eq $_) {
-                for (keys %channel_op) {
-                    send_msg ("MODE $_ +o $nick");
-                }
+                map { send_msg ("MODE $_ +o $nick"); } (keys %channel_op);
             }
         }
     }
@@ -445,15 +436,15 @@ sub process_irc_msg
     elsif ($irc_cmd eq "401") {
         my ($bork, $nick) = split(/\s+/, $param);
 
-        $nick_lock->down();
+        $info_lock->down();
         $online_nicks{$nick} = 0;
-        $nick_lock->up();
+        $info_lock->up();
     }
     # End of whois
     elsif ($irc_cmd eq "318") {
         my ($bork, $nick) = split(/\s+/, $param);
 
-        $nick_lock->down();
+        $info_lock->down();
 
         # If no entry, he's online as we set it to false if we get a no-nick response
         if (!defined($online_nicks{$nick})) {
@@ -464,33 +455,33 @@ sub process_irc_msg
         if (!defined($authed_nicks{$nick})) {
             $authed_nicks{$nick} = 0;
         }
-        $nick_lock->up();
+        $info_lock->up();
     }
     # Names in channel
     elsif ($irc_cmd eq "353") {
         $param =~ /:(.*)/;
         my @users = split(/\s+/, $1);
 
-        $nick_lock->down();
+        $info_lock->down();
 
         map {
             m/[@+]?(.*)/;
             $online_nicks{$1} = 1;
         } @users;
 
-        $nick_lock->up();
+        $info_lock->up();
     }
     elsif ($irc_cmd =~ /QUIT|PART/) {
         $prefix =~ $match_nick_prefix;
         my $nick = $1;
 
-        $nick_lock->down();
+        $info_lock->down();
         # He's not online anymore, no need for recheck until he connects again
         $online_nicks{$nick} = 0;
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = 0;
         }
-        $nick_lock->up();
+        $info_lock->up();
     }
     elsif ($irc_cmd eq "JOIN") {
         $prefix =~ $match_nick_prefix;
@@ -498,13 +489,13 @@ sub process_irc_msg
 
         if ($nick eq $botnick) { return };
 
-        $nick_lock->down();
+        $info_lock->down();
         $online_nicks{$nick} = 1;
         # If we have an entry of this fellaw, undef it so we must check it again
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = undef;
         }
-        $nick_lock->up();
+        $info_lock->up();
 
         # Recheck nick
         send_msg "WHOIS $nick";
@@ -518,7 +509,7 @@ sub process_irc_msg
 
         if ($old_nick eq $botnick) { return };
 
-        $nick_lock->down();
+        $info_lock->down();
 
         $online_nicks{$new_nick} = $online_nicks{$old_nick};
         delete $online_nicks{$old_nick};
@@ -527,7 +518,7 @@ sub process_irc_msg
             $authed_nicks{$new_nick} = $authed_nicks{$old_nick};
             $authed_nicks{$old_nick} = undef;
         }
-        $nick_lock->up();
+        $info_lock->up();
     }
     elsif ($irc_cmd eq "MODE") {
         my ($channel, $mode, $nick) = split (/ /, $param);
@@ -571,14 +562,13 @@ sub process_privmsg
 
         # Ignore clones of ourselves
         if (is_authed ($sender)) {
-            if (authed_as ($sender) eq "treebot") {
+            if (authed_as ($sender) eq $Conf::authed_nick) {
                 return;
             }
         }
 
-        # if we're the target change target so we don't message ourselves
-        # this looks pretty bad really, change?
-        if ($target =~ /$botnick/) {
+        # If we're in a private message, so we don't message ourselves
+        if ($target eq $botnick) {
             $target = $sender;
         }
 
@@ -634,10 +624,10 @@ sub process_cmd
         Irc::send_privmsg ($target, $msg);
     }
     elsif ($cmd eq "recheck") {
-        $nick_lock->down();
+        $info_lock->down();
 
         $authed_nicks{$sender} = undef;
-        $nick_lock->up();
+        $info_lock->up();
 
         is_authed $sender;
     }
@@ -730,27 +720,6 @@ sub process_admin_cmd
         my $list = join (", ", @plugins);
         send_privmsg ($target, $list);
     }
-    elsif ($cmd eq "is_op") {
-        if ($target =~ /^#/) {
-            if ($channel_op{$target}) {
-                send_privmsg ($target, "Yes I'm op.");
-            }
-            else {
-                send_privmsg ($target, "No I'm not :/");
-            }
-        }
-        else {
-            send_privmsg ($target, "I'm opping this conversation!!");
-        }
-    }
-    elsif ($cmd eq "is_online") {
-        if (is_online ($arg)) {
-            send_privmsg ($target, "$arg is online.");
-        }
-        else {
-            send_privmsg ($target, "$arg isn't online.");
-        }
-    }
     else {
         Plugin::process_admin_cmd ($sender, $target, $cmd, $arg);
     }
@@ -768,7 +737,7 @@ sub connection_successful
         irc_join @Conf::channels;
 
         # Register our nick if we're on quakenet
-        if ($Conf::server =~ /quakenet/) {
+        if ($Conf::shall_auth_with_Q && $Conf::server =~ /quakenet/) {
             if (-r "Q-pass") {
                 open my $fh, '<', "Q-pass";
                 my $pass = <$fh>;
@@ -791,13 +760,10 @@ sub connection_successful
 sub thread_cleaner
 {
     while (1) {
-        my @joinable = threads->list(threads::joinable);
+        map { $_->join(); } threads->list(threads::joinable);
 
-        for (@joinable) {
-            $_->join();
-        }
         threads::yield();
-        sleep 2;
+        sleep 5;
     }
 }
 
@@ -896,7 +862,6 @@ sub start
             }
             # Prevent segfaulting if we're trying to dispatch a command
             # before we've connected and loaded our plugins
-            #elsif ($has_connected) {
             elsif (has_connected()) {
                 # Empty sender and target means the command is internal
                 create_cmd_worker(\&process_cmd, "", "", $cmd, $arg);
@@ -923,7 +888,7 @@ sub start
             }
         }
 
-        recieve_msg $input;
+        Log::recieved $input;
 
         # We must respond to PINGs to avoid being disconnected.
         if ($input =~ $match_ping) {
@@ -958,8 +923,8 @@ sub quit
 
 sub irc_join
 {
-    for (@_) {
-        send_msg "JOIN $_";
+    if (scalar @_) {
+        send_msg "JOIN " . join(",", @_);
     }
 }
 sub irc_part
@@ -982,20 +947,24 @@ sub has_connected
 {
     my ($new_val) = @_;
 
+    $info_lock->down();
+
     if (defined ($new_val)) {
-        lock($has_connected);
         $has_connected = $new_val;
     }
-    return $has_connected;
+    my $res = $has_connected;
+
+    $info_lock->up();
+    return $res;
 }
 
 sub needs_recheck
 {
     my ($nick) = @_;
 
-    $nick_lock->down();
+    $info_lock->down();
     my $need = !defined ($authed_nicks{$nick});
-    $nick_lock->up();
+    $info_lock->up();
 
     return $need;
 }
@@ -1028,16 +997,19 @@ sub is_online
 {
     my ($nick) = @_;
 
+    # stdin is ""
+    if ($nick eq "") { return 1; }
+
     recheck_nick ($nick);
     my $res = 0;
-    $nick_lock->down();
+    $info_lock->down();
     if ($authed_nicks{$nick}) {
         $res = 1;
     }
     elsif ($online_nicks{$nick}) {
         $res = 1;
     }
-    $nick_lock->up();
+    $info_lock->up();
 
     return $res;
 }
@@ -1047,9 +1019,9 @@ sub is_authed
     my ($nick) = @_;
 
     recheck_nick ($nick);
-    $nick_lock->down();
+    $info_lock->down();
     my $auth = $authed_nicks{$nick};
-    $nick_lock->up();
+    $info_lock->up();
 
     return $auth;
 }
@@ -1059,9 +1031,9 @@ sub authed_as
     my ($nick) = @_;
 
     recheck_nick ($nick);
-    $nick_lock->down();
+    $info_lock->down();
     my $auth = $authed_nicks{$nick};
-    $nick_lock->up();
+    $info_lock->up();
 
     return $auth;
 }
@@ -1074,18 +1046,24 @@ sub is_admin
     if ($nick eq "") { return 1; }
 
     if (is_authed ($nick)) {
-        $nick_lock->down();
+        $info_lock->down();
 
         my $authed_nick = $authed_nicks{$nick};
         for my $admin (@Conf::admins) {
             if ($admin eq $authed_nick) {
-                $nick_lock->up();
+                $info_lock->up();
                 return 1;
             }
         }
-        $nick_lock->up();
+        $info_lock->up();
     }
     return 0;
+}
+
+sub is_op
+{
+    my ($target) = @_;
+    return $channel_op{$target};
 }
 
 sub shall_freeze
@@ -1139,25 +1117,19 @@ sub release_freeze
 sub cmds
 {
     my %cmds = Plugin::cmds();
-    for (@core_cmds) {
-        $cmds{$_} = 1;
-    }
+    map { $cmds{$_} = 1; } @core_cmds;
     return sort keys %cmds;
 }
 sub undoc_cmds
 {
     my %cmds = Plugin::undoc_cmds();
-    for (@core_undoc_cmds) {
-        $cmds{$_} = 1;
-    }
+    map { $cmds{$_} = 1; } @core_undoc_cmds;
     return sort keys %cmds;
 }
 sub admin_cmds
 {
     my %cmds = Plugin::admin_cmds();
-    for (@core_admin_cmds) {
-        $cmds{$_} = 1;
-    }
+    map { $cmds{$_} = 1; } @core_admin_cmds;
     return sort keys %cmds;
 }
 

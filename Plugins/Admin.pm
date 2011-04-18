@@ -27,10 +27,24 @@ class Admin extends DefaultPlugin
             Irc::send_privmsg ($target, $msg);
         }
         elsif ($cmd eq "pipe") {
-            Irc::push_out ($arg);
+            if ($arg) {
+                Irc::push_out ($arg);
+            }
         }
         elsif ($cmd eq "join") {
-            Irc::irc_join ($arg);
+            my @joined;
+            map {
+                if ($_ =~ /^[#&][^,]+$/) {
+                    push (@joined, $_);
+                }
+            } split(/ /, $arg);
+
+            if (scalar @joined) {
+                Irc::irc_join @joined;
+
+                my $msg = "Joined " . join(", ", @joined) . ".";
+                Irc::send_privmsg ($target, $msg);
+            }
         }
         elsif ($cmd eq "part") {
             $arg =~ /^(\S+)\s*(.*)$/;
@@ -65,6 +79,32 @@ class Admin extends DefaultPlugin
             }
             else {
                 Irc::send_privmsg $target, "$arg is not admin";
+            }
+        }
+        elsif ($cmd eq "is_op?") {
+            if ($target =~ /^#/) {
+                if (Irc::is_op ($target)) {
+                    Irc::send_privmsg ($target, "yes i'm op.");
+                }
+                else {
+                    Irc::send_privmsg ($target, "no i'm not :/");
+                }
+            }
+            else {
+                Irc::send_privmsg ($target, "i'm opping this conversation!!");
+            }
+        }
+        elsif ($cmd eq "is_online?") {
+            if ($arg) {
+                if (Irc::is_online ($arg)) {
+                    Irc::send_privmsg ($target, "$arg is online.");
+                }
+                else {
+                    Irc::send_privmsg ($target, "$arg isn't online.");
+                }
+            }
+            else {
+                Irc::send_privmsg ($target, "Hell yeah I'm online!");
             }
         }
     }

@@ -14,6 +14,9 @@ our $nick = "treebot";
 our $username = "treebot";
 our $realname = "Random Hacks Robot";
 
+our $shall_auth_with_Q = 1;
+our $authed_nick = "treebot";
+
 our @nick_reserves = qw(treebot_
                         treebot2000
                         treestbot);
