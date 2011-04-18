@@ -125,6 +125,7 @@ my $sock_lock = Thread::Semaphore->new(2);
 my $has_connected :shared = 0;
 
 my %authed_nicks :shared;
+my %online_nicks :shared;
 my $nick_lock = Thread::Semaphore->new();
 
 my $in_queue = Thread::Queue->new();
@@ -428,7 +429,6 @@ sub process_irc_msg
         my ($bork, $nick, $authed_nick) = split(/\s+/, $param);
 
         $nick_lock->down();
-
         $authed_nicks{$nick} = $authed_nick;
         $nick_lock->up();
 
@@ -441,11 +441,24 @@ sub process_irc_msg
             }
         }
     }
+    # No such nick
+    elsif ($irc_cmd eq "401") {
+        my ($bork, $nick) = split(/\s+/, $param);
+
+        $nick_lock->down();
+        $online_nicks{$nick} = 0;
+        $nick_lock->up();
+    }
     # End of whois
     elsif ($irc_cmd eq "318") {
         my ($bork, $nick) = split(/\s+/, $param);
 
         $nick_lock->down();
+
+        # If no entry, he's online as we set it to false if we get a no-nick response
+        if (!defined($online_nicks{$nick})) {
+            $online_nicks{$nick} = 1;
+        }
 
         # If no entry, he isn't authed
         if (!defined($authed_nicks{$nick})) {
@@ -453,13 +466,27 @@ sub process_irc_msg
         }
         $nick_lock->up();
     }
+    # Names in channel
+    elsif ($irc_cmd eq "353") {
+        $param =~ /:(.*)/;
+        my @users = split(/\s+/, $1);
+
+        $nick_lock->down();
+
+        map {
+            m/[@+]?(.*)/;
+            $online_nicks{$1} = 1;
+        } @users;
+
+        $nick_lock->up();
+    }
     elsif ($irc_cmd =~ /QUIT|PART/) {
         $prefix =~ $match_nick_prefix;
         my $nick = $1;
 
         $nick_lock->down();
-
-        # If entry exists, set it to 0
+        # He's not online anymore, no need for recheck until he connects again
+        $online_nicks{$nick} = 0;
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = 0;
         }
@@ -472,6 +499,7 @@ sub process_irc_msg
         if ($nick eq $botnick) { return };
 
         $nick_lock->down();
+        $online_nicks{$nick} = 1;
         # If we have an entry of this fellaw, undef it so we must check it again
         if (exists($authed_nicks{$nick})) {
             $authed_nicks{$nick} = undef;
@@ -491,6 +519,9 @@ sub process_irc_msg
         if ($old_nick eq $botnick) { return };
 
         $nick_lock->down();
+
+        $online_nicks{$new_nick} = $online_nicks{$old_nick};
+        delete $online_nicks{$old_nick};
 
         if (exists($authed_nicks{$old_nick})) {
             $authed_nicks{$new_nick} = $authed_nicks{$old_nick};
@@ -710,6 +741,14 @@ sub process_admin_cmd
         }
         else {
             send_privmsg ($target, "I'm opping this conversation!!");
+        }
+    }
+    elsif ($cmd eq "is_online") {
+        if (is_online ($arg)) {
+            send_privmsg ($target, "$arg is online.");
+        }
+        else {
+            send_privmsg ($target, "$arg isn't online.");
         }
     }
     else {
@@ -969,11 +1008,7 @@ sub recheck_nick
     if ($nick =~ /^\s*$/) { return; }
 
     while (1) {
-        $nick_lock->down();
-        my $defined = defined ($authed_nicks{$nick});
-        $nick_lock->up();
-
-        if ($defined) {
+        if (!needs_recheck ($nick)) {
             return;
         }
         elsif (!$whois_sent) {
@@ -982,18 +1017,29 @@ sub recheck_nick
             freeze_until ('318');
 
             threads::yield();
-            sleep 1;
         }
         else {
             threads::yield();
-            sleep 1;
         }
     }
 }
 
 sub is_online
 {
+    my ($nick) = @_;
 
+    recheck_nick ($nick);
+    my $res = 0;
+    $nick_lock->down();
+    if ($authed_nicks{$nick}) {
+        $res = 1;
+    }
+    elsif ($online_nicks{$nick}) {
+        $res = 1;
+    }
+    $nick_lock->up();
+
+    return $res;
 }
 
 sub is_authed
@@ -1044,8 +1090,6 @@ sub is_admin
 
 sub shall_freeze
 {
-    #Log::debug "Shall freeze?";
-
     $freeze_lock->down();
     my @cmds_left = keys %freeze_until_code;
     $freeze_lock->up();
