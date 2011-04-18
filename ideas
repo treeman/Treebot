@@ -29,6 +29,18 @@
     check a package location
 *imdb
 *lambdabot system
+    list channels
+    *list modules (plugins)
+    list cmds for module
+    *uptime
+    *echo
+    join
+    leave
+    part
+    msg
+    quit
+    admin status
+    ignore
 *lithcourse
 *lithschema
 *madeoftree
@@ -54,8 +66,21 @@
 *slap
 *tell
     tell a user something when he comes online
+    ask a user something when he comes online
+    messages - check messages
+    messages?
+    clear-messages
+    print-notices
+    purge-notices
+*todo
+    list
+    add
+    delete
 *topic
     Manage topic
+*url
+    fetch url title of links
+*version
 *wiki
 *insult/compliment
     Monkey Island toplists
