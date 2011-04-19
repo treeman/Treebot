@@ -13,18 +13,30 @@ package Manga;
 use Util::Site;
 use Util::StoreHash;
 
+# Load state and start up manga_updater
+sub init;
+# Save state
+sub close;
+
 # Save latest state, so we can notify of updates
 sub load_from_disk;
 sub store_to_disk;
 
-# Retrieve cached manga info
+# Retrieve manga info
+# If cached return that else fetch new info
 sub get_info;
 # Get formated manga info
 sub get_manga;
-# Recheck all manga
-sub check_latest_manga;
+# Recheck manga
+sub check_manga;
+# Recheck all manga we have a record of
+sub recheck_known_manga;
 # Get hash with info about a specific manga
 sub fetch_info;
+# If we have relevant info about a manga
+sub has_manga;
+# Periodically update all tracked manga, launch in separate thread
+sub manga_updater;
 
 # We have some info about a manga, let's try to add it
 sub add_info;
@@ -46,7 +58,23 @@ sub print_manga;
 
 # Info about all manga we're tracking
 my $manga_info :shared = &share({});
+
+my $cache_time :shared = 90;
+my $last_update :shared;
+
 my $lock = Thread::Semaphore->new();
+
+sub init
+{
+    load_from_disk();
+    my $updater = threads->create(\&manga_updater);
+    $updater->detach();
+}
+
+sub close
+{
+    store_to_disk();
+}
 
 sub load_from_disk
 {
@@ -65,21 +93,36 @@ sub get_info
 {
     my ($manga) = @_;
 
-    $lock->down();
-    my $info = $manga_info->{$manga};
-    $lock->up();
-
-    return $info;
+    if (has_manga ($manga)) {
+        $lock->down();
+        my $info = $manga_info->{$manga};
+        $lock->up();
+        return $info;
+    }
+    else {
+        my $info = fetch_info ($manga);
+        if (is_useful) {
+            add_info ($info);
+            return $info;
+        }
+        else {
+            return undef
+        }
+    }
 }
 
 sub get_manga
 {
-    my ($manga) = @_;
-
-    return format_manga (get_info ($manga));
+    my @manga;
+    for (@_) {
+        say $_;
+        my $f = format_manga (get_info ($_));
+        push (@manga, $f) if $f;
+    }
+    return @manga;
 }
 
-sub check_latest_manga
+sub check_manga
 {
     my @manga = @_;
     my @threads;
@@ -104,6 +147,19 @@ sub check_latest_manga
         }
         @threads = @not_done;
     }
+
+    $lock->down();
+    $last_update = time;
+    $lock->up();
+}
+
+sub recheck_known_manga
+{
+    $lock->down();
+    my @manga = (keys %$manga_info);
+    $lock->up();
+
+    check_manga (@manga);
 }
 
 sub fetch_info
@@ -133,6 +189,40 @@ sub fetch_info
     }
 
     return $info;
+}
+
+sub has_manga
+{
+    my ($manga) = @_;
+
+    $lock->down();
+    my $has = exists ($manga_info->{$manga})
+        && is_useful ($manga_info->{$manga});
+    $lock->up();
+
+    return $has;
+}
+
+sub manga_updater
+{
+    while (1) {
+        $lock->down();
+        my $shall_update = !defined ($last_update)
+            || $cache_time - (time - $last_update) >= 0;
+        $lock->up();
+
+        if ($shall_update) {
+            recheck_known_manga();
+            sleep $cache_time;
+        }
+        else {
+            $lock->down();
+            my $time_left = $cache_time - (time - $last_update);
+            $lock->up();
+
+            sleep $time_left if $time_left > 0;
+        }
+    }
 }
 
 sub add_info
@@ -172,7 +262,8 @@ sub update_info
 sub is_useful
 {
     my ($info) = @_;
-    return defined($$info{"manga"}) &&
+    return defined($info) &&
+           defined($$info{"manga"}) &&
            defined($$info{"link"}) &&
            defined($$info{"chapter"});
 }
@@ -203,14 +294,19 @@ sub format_manga
 {
     my ($info) = @_;
 
-    my $txt = $info->{"manga"}." ".$info->{"chapter"};
-#    if ($info->{"title"}) {
-#        $txt .= ": ".$info->{"title"};
-#    }
+    if (is_useful ($info)) {
+        my $txt = $info->{"manga"}." ".$info->{"chapter"};
+#       if ($info->{"title"}) {
+#           $txt .= ": ".$info->{"title"};
+#       }
 
-    $info->{"link"} =~ /^http:\/\/(?:www\.)?([^\/]+)/;
-    $txt .= " ($1)";
-    return $txt;
+        $info->{"link"} =~ /^http:\/\/(?:www\.)?([^\/]+)/;
+        $txt .= " ($1)";
+        return $txt;
+    }
+    else {
+        return "";
+    }
 }
 
 sub convert_url
@@ -225,7 +321,7 @@ sub get_mangastream_info
 {
     my ($manga) = @_;
 
-    my $site = Site::get "http://mangastream.com/manga";
+    my $site = Site::get "http://mangastream.com/manga", $cache_time;
 
     my $info = {};
 
@@ -257,7 +353,7 @@ sub get_mangable_info
     my ($manga) = @_;
     my $manga_url = convert_url ($manga);
 
-    my $site = Site::get "http://mangable.com/manga-list/";
+    my $site = Site::get "http://mangable.com/manga-list/", $cache_time;
 
     my $info = {};
 
