@@ -17,10 +17,14 @@ use Util::StoreHash;
 sub load_from_disk;
 sub store_to_disk;
 
+# Retrieve cached manga info
+sub get_info;
+# Get formated manga info
+sub get_manga;
 # Recheck all manga
 sub check_latest_manga;
 # Get hash with info about a specific manga
-sub get_latest;
+sub fetch_info;
 
 # We have some info about a manga, let's try to add it
 sub add_info;
@@ -57,13 +61,32 @@ sub store_to_disk
     StoreHash::store_hash_hash ("manga", $manga_info);
 }
 
+sub get_info
+{
+    my ($manga) = @_;
+
+    $lock->down();
+    my $info = $manga_info->{$manga};
+    $lock->up();
+
+    return $info;
+}
+
+sub get_manga
+{
+    my ($manga) = @_;
+
+    return format_manga (get_info ($manga));
+}
+
 sub check_latest_manga
 {
     my @manga = @_;
     my @threads;
 
+    # Parallell fetch and update mangas
     for my $manga (@manga) {
-        push (@threads, (threads->create(\&get_latest, $manga)));
+        push (@threads, (threads->create(\&fetch_info, $manga)));
     }
 
     while (scalar @threads) {
@@ -80,33 +103,36 @@ sub check_latest_manga
             }
         }
         @threads = @not_done;
-        if (scalar @threads) { sleep 1 };
     }
 }
 
-sub get_latest
+sub fetch_info
 {
     my ($manga) = @_;
 
     my $info = {};
 
-    update_info ($info, get_mangastream_info ($manga));
-    update_info ($info, get_mangable_info ($manga));
+    # Parallell manga fetching
+    # This way we don't need parallell pre download sites
+    my @threads;
+
+    push (@threads, (threads->create(\&get_mangastream_info, $manga)));
+    push (@threads, (threads->create(\&get_mangable_info, $manga)));
+
+    while (scalar @threads) {
+        my @not_done;
+        for my $thr (@threads) {
+            if ($thr->is_joinable) {
+                update_info ($info, $thr->join());
+            }
+            else {
+                push (@not_done, $thr);
+            }
+        }
+        @threads = @not_done;
+    }
 
     return $info;
-}
-
-sub get_latest_list
-{
-    my $manga = {};
-
-    for (@_) {
-        my $info = get_latest ($_);
-        if (scalar %$info) {
-            $manga->{$info->{"manga"}} = $info;
-        }
-    }
-    return $manga;
 }
 
 sub add_info
@@ -115,6 +141,7 @@ sub add_info
     my $manga = $$info{"manga"};
 
     $lock->down();
+
     # If we already have a manga checked in and we now have a newer
     if (exists ($manga_info->{$manga}) &&
         is_useful ($manga_info->{$manga}) &&
@@ -174,14 +201,14 @@ sub is_better
 
 sub format_manga
 {
-    my (%info) = @_;
+    my ($info) = @_;
 
-    my $txt = $info{"manga"}." ".$info{"chapter"};
-#    if ($info{"title"}) {
-#        $txt .= ": ".$info{"title"};
+    my $txt = $info->{"manga"}." ".$info->{"chapter"};
+#    if ($info->{"title"}) {
+#        $txt .= ": ".$info->{"title"};
 #    }
 
-    $info{"link"} =~ /^http:\/\/(?:www\.)?([^\/]+)/;
+    $info->{"link"} =~ /^http:\/\/(?:www\.)?([^\/]+)/;
     $txt .= " ($1)";
     return $txt;
 }
