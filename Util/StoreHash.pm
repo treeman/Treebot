@@ -13,6 +13,7 @@ sub store_simple
     my $file = "info/$name";
 
     open my $fh, '>', $file or croak "Couldn't open file: $file";
+    #flock $fh, LOCK_EX;
 
     for my $key (sort keys %h) {
         print $fh "$key: $h{$key}\n";
@@ -30,6 +31,7 @@ sub retrieve_simple
     my %h;
     if (-e $file) {
         open my $fh, '<', $file or croak "Couldn't open file: $file";
+        #flock $fh, LOCK_SH;
 
         while (<$fh>) {
             $_ =~ /^([^:]+):\s*(.*)/;
@@ -54,6 +56,7 @@ sub store_hash_hash
     my $file = "Data/$name";
 
     open my $fh, '>', $file or croak "Couldn't open file: $file";
+    #flock $fh, LOCK_EX;
 
     for my $key (keys %$h) {
         my $hashes = "";
@@ -80,6 +83,7 @@ sub retrieve_hash_hash
     my $outer;
     if (-e $file) {
         open my $fh, '<', $file or croak "Couldn't open file: $file";
+        #flock $fh, LOCK_SH;
 
         my $outer_key = "";
         my $inner = {};

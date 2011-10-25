@@ -270,26 +270,26 @@ sub load_file
     $plugins->{$file} = share($plugin);
     $plugin->load();
 
-    my @cmds = $plugin->cmds();
-    for my $cmd (@cmds) {
-        if ($cmd) {
-            $cmd_list{$cmd} = 1;
-        }
-    }
+    #my @cmds = $plugin->cmds();
+    #for my $cmd (@cmds) {
+        #if ($cmd) {
+            #$cmd_list{$cmd} = 1;
+        #}
+    #}
 
-    my @undoc_cmds = $plugin->undocumented_cmds();
-    for my $cmd (@undoc_cmds) {
-        if ($cmd) {
-            $undoc_cmd_list{$cmd} = 1;
-        }
-    }
+    #my @undoc_cmds = $plugin->undocumented_cmds();
+    #for my $cmd (@undoc_cmds) {
+        #if ($cmd) {
+            #$undoc_cmd_list{$cmd} = 1;
+        #}
+    #}
 
-    my @admin_cmds = $plugin->admin_cmds();
-    for my $cmd (@admin_cmds) {
-        if ($cmd) {
-            $admin_cmd_list{$cmd} = 1;
-        }
-    }
+    #my @admin_cmds = $plugin->admin_cmds();
+    #for my $cmd (@admin_cmds) {
+        #if ($cmd) {
+            #$admin_cmd_list{$cmd} = 1;
+        #}
+    #}
 
     $lock->up();
 
