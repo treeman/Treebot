@@ -3,102 +3,108 @@
 use utf8;
 use locale;
 
+use threads;
+use threads::shared;
+
 use Modern::Perl;
 use IO::Socket;
 use Carp;
 use Test::More;
+use Getopt::Long;
 
 use Conf;
 use Log;
+use Irc;
+use Plugin;
 
-my $sock;
+# Command line options
+my $daemonize;          # Start as daemon.
 
-my $botnick;
+my $dry;                # Don't connect at all.
+my $test;               # Run in test mode. Implies dry but test connect.
+my $run_tests;          # Run tests.
 
-sub output
+my $verbose;            # Verbose output, both log and stdout
+my $bare;               # Only log bare essentials
+my $debug;              # Log debug messages;
+my $no_out;             # Nothing to stdout
+
+# Save options
+my @args = @ARGV;
+
+Getopt::Long::Configure ("bundling");
+GetOptions(
+    'bare|b' => \$bare,
+    'daemon|d' => \$daemonize,
+    'debug' => \$debug,
+    'dry' => \$dry,
+    'no_out' => \$no_out,
+    'run_tests' => \$run_tests,
+    'test|t' => \$test,
+    'verbose|v' => \$verbose,
+);
+
+# Only show test messages, no garbage ty
+if ($run_tests) {
+    $no_out = 1;
+}
+
+if ($daemonize) {
+    daemonize();
+}
+
+Log::init ($verbose, $bare, $debug, $no_out);
+
+Log::debug ("Loading plugins.");
+
+# Load all plugins
+Plugin::load_plugins();
+
+# Thread for piping commands and stuff to our irc handler
+my $stdin_listener = threads->create(\&stdin_listener);
+
+# Run tests
+if ($run_tests) {
+    Irc::run_tests();
+}
+# Launch irc
+else {
+    Irc::start($dry, $test);
+}
+
+# Clean threads etc
+cleanup();
+
+# Should be run in a separate thread
+sub stdin_listener
 {
-    my $msg = join (" ", @_);
-    print $sock "$msg\r\n";
-    Log::sent ($msg);
-}
+    while (<STDIN>) {
+        my $in = $_;
+        chomp $in;
 
-# Split into irc specific parts
-sub split_irc_msg
-{
-    my ($msg) = @_;
-
-    $msg =~ /^
-        (?:
-            :(\S+)      # (1) prefix
-            \s
-        )?              # prefix isn't mandatory
-        (\S+)           # (2) cmd
-        \s
-        (.+?)           # (3) parameters
-        \r?             # irc standard includes carriage return which we don't want
-        $
-    /x;
-
-    my ($prefix, $cmd, $param) = ($1, $2, $3);
-
-    $cmd = "" when (!$cmd);
-
-    return ($prefix, $cmd, $param);
-}
-
-my $attempt = 0;
-while (!$sock) {
-    # Connect to the IRC server
-    $sock = new IO::Socket::INET(PeerAddr => $Conf::server,
-                                 PeerPort => $Conf::port,
-                                 Proto => 'tcp');
-    ++$attempt;
-    if (!$sock) {
-        #Log::error "Attempt $attempt failed..";
-        say "! Attempt $attempt failed..";
-    }
-
-    if ($attempt > 4) {
-        croak "Couldn't connect, aborting.";
-    }
-}
-
-# Register user and nickname
-irc_nick ($Conf::nick);
-output ("USER $Conf::username 0 * :$Conf::realname");
-
-# Parse input
-while (my $input = <$sock>) {
-    Log::recieved ($input);
-
-    # Handle ping
-    if ($input =~ /^PING\s(.*)$/i) {
-        output ("PONG $1");
-    }
-
-    my ($prefix, $cmd, $param) = split_irc_msg ($input);
-
-    # Login successful
-    if ($cmd =~ /004/) {
-        output ("JOIN #madeoftree");
-    }
-    # Nickname in use
-    elsif ($cmd =~ /433/) {
-        # Try one of our backup nicknames
-        if (scalar @Conf::nick_reserves) {
-            irc_nick (shift @Conf::nick_reserves);
+        # We've recieved a command. It will be parsed in the in queue, will be run on the main thread.
+        if ($in =~ /^\Q$Conf::cmd_prefix\E/) {
+            # TODO maybe change?
+            Irc::push_in($in);
         }
-        # Instead of lying down and dying try a variation
+        # Act like we've recieved the message from the socket.
+        elsif ($in =~ /^<\s*(.*)/) {
+            Irc::push_in ("$1\r\n");
+        }
+        # If nothing special pipe it to the server.
         else {
-            irc_nick ($Conf::nick . int(rand(100)));
+            Irc::output ($in);
         }
     }
 }
 
-sub irc_nick
+# Do some cleanup
+sub cleanup
 {
-    my ($nick) = @_;
-    output ("NICK $nick");
-    $botnick = $nick;
+    Log::exe ("Cleaning threads.");
+
+    for my $t (threads->list()) {
+        $t->detach();
+    }
 }
 

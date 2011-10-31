@@ -10,9 +10,9 @@ use Test::More;
 
 my $server = "irc.quakenet.org";
 my $port = 6667;
-my $nickname = "treebot";
-my $username = "treebot";
-my $realname = "I bot ze trees";
+my $nickname = "simplebot";
+my $username = "simplebot";
+my $realname = "I'm very simple minded oh yeah";
 
 my $sock;
 
@@ -42,7 +42,7 @@ sub split_irc_msg
 
     my ($prefix, $cmd, $param) = ($1, $2, $3);
 
-    $cmd = "" when (!$cmd);
+    $prefix = "" if (!$prefix);
 
     return ($prefix, $cmd, $param);
 }
@@ -81,6 +81,11 @@ while (my $input = <$sock>) {
 
     if ($cmd =~ /004/) {
         output ("JOIN #madeoftree");
+    }
+    # Handle a privmsg and if someone says hello, respond
+    elsif ($cmd eq "PRIVMSG" && $param =~ /^(#.+) :.*hello/) {
+        my $channel = $1;
+        output ("PRIVMSG $channel :hello there!");
     }
 }
 

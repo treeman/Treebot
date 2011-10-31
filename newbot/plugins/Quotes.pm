@@ -8,38 +8,35 @@ use Test::More;
 
 use MooseX::Declare;
 use Plugin;
-use DukeNukem;
+use quotes::DukeNukem;
 
 class Quotes extends DefaultPlugin
 {
-    override cmds
-    {
+    override cmds {
         return qw(duke
                   duke3D
                   dnf);
     }
 
-    override process_cmd ($sender, $target, $cmd, $args)
-    {
+    override process_cmd ($sender, $target, $cmd, $args) {
         if ($cmd eq "duke") {
             my $quote = Duke::random_quote();
 
-            Irc::send_privmsg ($target, $quote);
+            Irc::irc_privmsg ($target, $quote);
         }
         elsif ($cmd =~ /duke3[dD]/) {
             my $quote = Duke::duke3D_quote();
 
-            Irc::send_privmsg ($target, $quote);
+            Irc::irc_privmsg ($target, $quote);
         }
         elsif ($cmd eq "dnf") {
             my $quote = Duke::dnf_quote();
 
-            Irc::send_privmsg ($target, $quote);
+            Irc::irc_privmsg ($target, $quote);
         }
     }
 
-    override cmd_help ($cmd)
-    {
+    override cmd_help ($cmd) {
         if ($cmd eq "duke") {
             return "My job is to kick ass, not make small talk.";
         }
