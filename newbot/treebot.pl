@@ -84,7 +84,6 @@ sub stdin_listener
 
         # We've recieved a command. It will be parsed in the in queue, will be run on the main thread.
         if ($in =~ /^\Q$Conf::cmd_prefix\E/) {
-            # TODO maybe change?
             Irc::push_in($in);
         }
         # Act like we've recieved the message from the socket.

@@ -49,8 +49,15 @@ package Plugin;
 
 use Carp;
 
+# One instance of every available plugin
 my %plugins;
 
+# Lists of all available commands
+my %cmds;
+my %undoc_cmds;
+my %admin_cmds;
+
+# Load all working plugins within plugin folder
 sub load_plugins
 {
     my $dirname = "plugins/";
@@ -87,7 +94,13 @@ sub load_plugins
             next;
         }
 
+        # Let the plugin set itself up, where nice here
         $plugin->load();
+
+        # Update available commands
+        map { $cmds{$_} = 1; } $plugin->cmds();
+        map { $undoc_cmds{$_} = 1; } $plugin->undoc_cmds();
+        map { $admin_cmds{$_} = 1; } $plugin->admin_cmds();
 
         # Add in our loaded plugin
         $plugins{$class} = $plugin;
@@ -103,6 +116,7 @@ sub process_privmsg { process ('process_privmsg', @_); }
 sub process_cmd { process ('process_cmd', @_); }
 sub process_admin_cmd { process ('process_admin_cmd', @_); }
 
+# Call every plugin with specified command name
 sub process
 {
     my $sub = shift @_;
@@ -112,6 +126,12 @@ sub process
     }
 }
 
+# Return available commands
+sub cmds { return %cmds; }
+sub undoc_cmds { return %undoc_cmds; }
+sub admin_cmds { return %admin_cmds; }
+
+# Return a list of help messages from specified command
 sub get_cmd_help
 {
     my @help;

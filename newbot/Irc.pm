@@ -17,16 +17,30 @@ use Carp;
 use Test::More;
 
 use Log;
+use Conf;
+use Msgs;
 
 # Thread safe queues for writing to our socket and reading from it
 my $in_queue = Thread::Queue->new();
 my $out_queue = Thread::Queue->new();
 
+# Handles input output in a multithreaded fashion
 sub push_in { map { $in_queue->enqueue ($_); } @_; }
 sub push_out { map { $out_queue->enqueue ($_); } @_; }
 
 my $sock;
 my $sock_lock = Thread::Semaphore->new(2);
+
+# Our current name
+my $botnick;
+
+# Commands visible in listings
+my @cmds = qw(cmds help);
+my @undoc_cmds = qw(undoc);
+my @admin_cmds = qw(admin_cmds recheck quit);
+
+# Who are auth?
+my %authed_nicks;
 
 # Read the socket in a thread safe manner
 sub read_socket
@@ -84,18 +98,29 @@ sub log_out
     }
 }
 
-# Our current name
-my $botnick;
+# Flag is set when we're connected and we can recieve commands
+my $has_connected = 0;
 
-# Startup irc
-# Will run until we get called quits
-sub start
+# Setup and connect to irc
+sub init
 {
     my ($dry, $test) = @_;
 
+    # Setup available commands
+    my %available;
 
-    # Flag is set when we're connected and we can recieve commands
-    my $has_connected = 0;
+    # Remove duplicates and sort commands
+    %available = Plugin::cmds();
+    map { $available{$_} = 1; } @cmds;
+    @cmds = sort keys %available;
+
+    %available = Plugin::undoc_cmds();
+    map { $available{$_} = 1; } @undoc_cmds;
+    @undoc_cmds = sort keys %available;
+
+    %available = Plugin::admin_cmds();
+    map { $available{$_} = 1; } @admin_cmds;
+    @admin_cmds = sort keys %available;
 
     # Pretend to log in to the server, but don't
     # Still wait for commands from the in queue
@@ -151,6 +176,16 @@ sub start
         # Worker thread who output everything in $out_queue to socket
         my $socket_writer = threads->create(\&socket_writer, $sock);
     }
+}
+
+# Startup irc
+# Will run until we get called quits
+sub start
+{
+    my ($dry, $test) = @_;
+
+    # Setup and connect to irc
+    init ($dry, $test);
 
     # Parse input
     while (my $input = $in_queue->dequeue())
@@ -201,57 +236,53 @@ sub start
             }
         }
 
-        # Only do these after we're connected
-        if ($has_connected)
-        {
-            # Check plugin actions for irc message
-            Plugin::process_irc_msg ($prefix, $cmd, $param);
+        # Handle more complex tasks only after we're connected
+        process_post_login ($prefix, $cmd, $param) if ($has_connected);
+    }
+}
 
-            # Handle privmsg
-            if ($cmd =~ /PRIVMSG/) {
-                my $nick = (split /!/, $prefix)[0];
+# Handle tasks
+sub process_post_login
+{
+    my ($prefix, $cmd, $param) = @_;
 
-                my ($target, $what) = split_privmsg ($param);
+    # Check plugin actions for irc message
+    Plugin::process_irc_msg ($prefix, $cmd, $param);
 
-                Log::debug ("Privmsg: $nick $target $what");
+    # Handle privmsg
+    if ($cmd =~ /PRIVMSG/) {
+        my $nick = (split /!/, $prefix)[0];
 
-                Plugin::process_privmsg ($nick, $target, $what);
+        my ($target, $what) = split_privmsg ($param);
 
-                # If someone did type help
-                if ($what eq "help") {
-                    irc_privmsg ($target, "If you want my help try ${Conf::cmd_prefix}help");
-                }
+        Log::debug ("Privmsg: $nick $target $what");
 
-                # If we have a command
-                if ($what =~ /^\Q$Conf::cmd_prefix\E(\S+)\s*(.*)/) {
-                    my ($cmd, $rest) = ($1, $2);
+        Plugin::process_privmsg ($nick, $target, $what);
 
-                    if ($cmd eq "help") {
-                        if ($rest eq "") {
-                            irc_privmsg ($target, "I'm just a simple bot. Prefix commands with a $Conf::cmd_prefix to issue a command, ex `.mi_insult`. Type `${Conf::cmd_prefix}cmds for a list of commands.");
-                        }
-                        elsif ($rest eq "help") {
-                            irc_privmsg ($target, "Find out how I can service you.");
-                        }
-                        else {
-                            my $help_sent = 0;
-
-                            my @help = Plugin::get_cmd_help ($rest);
-                            for my $msg (@help) {
-                                irc_privmsg ($target, $msg);
-                                $help_sent = 1;
-                            }
-
-                            if (!$help_sent) {
-                                irc_privmsg ($target, "Sorry you're on your own!");
-                            }
-                        }
-                    }
-
-                    process_cmd ($nick, $target, $cmd, $rest);
-                }
-            }
+        # If someone did type help
+        if ($what =~ /help.?/i) {
+            irc_privmsg ($target, $Msgs::want_help);
         }
+
+        # If we have a command
+        if ($what =~ /^\Q$Conf::cmd_prefix\E(\S+)\s*(.*)/) {
+            my ($cmd, $rest) = ($1, $2);
+
+            process_cmd ($nick, $target, $cmd, $rest);
+        }
+    }
+    # Nick is auth
+    elsif ($cmd eq "330") {
+        my ($nick, $authed_nick) = (split /\s+/, $param)[1,2];
+
+        $authed_nicks{$nick} = $authed_nick;
+    }
+    # End of whois
+    elsif ($cmd eq "318") {
+        my $nick = (split /\s+/, $param)[1];
+
+        # If we don't have a record of the nick, mark as not authed
+        $authed_nicks{$nick} = 0 if (!defined ($authed_nicks{$nick}));
     }
 }
 
@@ -261,7 +292,56 @@ sub process_cmd
 
     Log::debug ("cmd recieved: $cmd $rest");
 
+    if ($cmd eq "help") {
+        if ($rest eq "") {
+            irc_privmsg ($target, $Msgs::help);
+        }
+        elsif ($rest eq "help") {
+            irc_privmsg ($target, $Msgs::help_help);
+        }
+        else {
+            my $help_sent = 0;
+
+            my @help = Plugin::get_cmd_help ($rest);
+            for my $msg (@help) {
+                irc_privmsg ($target, $msg);
+                $help_sent = 1;
+            }
+
+            if (!$help_sent) {
+                irc_privmsg ($target, $Msgs::help_missing);
+            }
+        }
+    }
+    elsif ($cmd =~ /^cmds|commands$/) {
+        my $msg = "Documented commads: " . join (", ", @cmds);
+        irc_privmsg ($target, $msg);
+    }
+    elsif ($cmd =~ /^undocumented_?cmds|undoc$/) {
+        my $msg = "Documented commads: " . join (", ", @undoc_cmds);
+        irc_privmsg ($target, $msg);
+    }
+    # Command for rechecking admin status
+    elsif ($cmd eq "recheck") {
+        if ($rest) {
+            recheck ($rest);
+        }
+        else {
+            recheck ($nick);
+        }
+    }
+
     Plugin::process_cmd ($nick, $target, $cmd, $rest);
+
+    # Process admin command
+    if (is_admin ($nick)) {
+        if ($cmd =~ /^admin_cmds$/) {
+            my $msg = "Admin commads: " . join (", ", @admin_cmds);
+            irc_privmsg ($target, $msg);
+        }
+
+        Plugin::process_admin_cmd ($nick, $target, $cmd, $rest);
+    }
 }
 
 # Send irc specific stuff
@@ -293,8 +373,15 @@ sub irc_quit
         output ("QUIT :$msg");
     }
     else {
-        output ("QUIT :Time for my beauty sleep.");
+        output ("QUIT :$Msgs::quit");
     }
+}
+
+sub irc_whois
+{
+    my ($nick) = @_;
+
+    output ("WHOIS $nick");
 }
 
 # Output to socket
@@ -303,12 +390,36 @@ sub output
     my $msg = join (" ", @_);
     chomp $msg;
 
-    # Place in out queue for processing
-    if (length ($msg) > 0) {
+    # Place in out queue for processing if not empty
+    if ($msg !~ /^\s*$/) {
         push_out ($msg);
     }
     else {
         Log::error ("Trying to output an empty message.");
+    }
+}
+
+# Recheck a nick for auth
+sub recheck
+{
+    my ($nick) = @_;
+
+    $authed_nicks{$nick} = undef if (exists ($authed_nicks{$nick}));
+
+    irc_whois ($nick);
+}
+
+# Check if a nick is admin
+sub is_admin
+{
+    my ($nick) = @_;
+
+    # Sent from stdin
+    if ($nick eq "") {
+        return 1;
+    }
+    else {
+        return $authed_nicks{$nick};
     }
 }
 

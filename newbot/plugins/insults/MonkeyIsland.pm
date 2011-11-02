@@ -293,7 +293,7 @@ sub retort_recieved
     }
 
     # Finally match non case sensitive
-    if ($last_insult and $insults{$last_insult} =~ /$retort/i) {
+    if ($last_insult and $insults{$last_insult} =~ /\Q$retort\E/i) {
         # Later on do something better here I guess
         return "Oh lala!";
     }
