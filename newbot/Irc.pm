@@ -217,9 +217,36 @@ sub start
 
                 Plugin::process_privmsg ($nick, $target, $what);
 
+                # If someone did type help
+                if ($what eq "help") {
+                    irc_privmsg ($target, "If you want my help try ${Conf::cmd_prefix}help");
+                }
+
                 # If we have a command
                 if ($what =~ /^\Q$Conf::cmd_prefix\E(\S+)\s*(.*)/) {
                     my ($cmd, $rest) = ($1, $2);
+
+                    if ($cmd eq "help") {
+                        if ($rest eq "") {
+                            irc_privmsg ($target, "I'm just a simple bot. Prefix commands with a $Conf::cmd_prefix to issue a command, ex `.mi_insult`. Type `${Conf::cmd_prefix}cmds for a list of commands.");
+                        }
+                        elsif ($rest eq "help") {
+                            irc_privmsg ($target, "Find out how I can service you.");
+                        }
+                        else {
+                            my $help_sent = 0;
+
+                            my @help = Plugin::get_cmd_help ($rest);
+                            for my $msg (@help) {
+                                irc_privmsg ($target, $msg);
+                                $help_sent = 1;
+                            }
+
+                            if (!$help_sent) {
+                                irc_privmsg ($target, "Sorry you're on your own!");
+                            }
+                        }
+                    }
 
                     process_cmd ($nick, $target, $cmd, $rest);
                 }
@@ -233,6 +260,7 @@ sub process_cmd
     my ($nick, $target, $cmd, $rest) = @_;
 
     Log::debug ("cmd recieved: $cmd $rest");
+
     Plugin::process_cmd ($nick, $target, $cmd, $rest);
 }
 

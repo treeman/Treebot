@@ -112,5 +112,19 @@ sub process
     }
 }
 
+sub get_cmd_help
+{
+    my @help;
+
+    for my $plugin (values %plugins) {
+        my $help = $plugin->cmd_help (@_);
+        if ($help) {
+            push (@help, $help);
+        }
+    }
+
+    return @help;
+}
+
 1;
 
