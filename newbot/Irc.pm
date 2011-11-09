@@ -37,10 +37,21 @@ my $botnick;
 # Commands visible in listings
 my @cmds = qw(cmds help);
 my @undoc_cmds = qw(undoc);
-my @admin_cmds = qw(admin_cmds recheck quit);
+my @admin_cmds = qw(admin_cmds
+                    kick
+                    msg
+                    op
+                    out
+                    quit
+                    recheck
+                    is_admin
+                    topic);
 
 # Who are auth?
 my %authed_nicks;
+
+# Am I op in what channels?
+my %my_op_channels;
 
 # Read the socket in a thread safe manner
 sub read_socket
@@ -178,6 +189,9 @@ sub init
     }
 }
 
+# Flag to end loop
+my $has_quit = 0;
+
 # Startup irc
 # Will run until we get called quits
 sub start
@@ -238,6 +252,9 @@ sub start
 
         # Handle more complex tasks only after we're connected
         process_post_login ($prefix, $cmd, $param) if ($has_connected);
+
+        # End loop if we want to quit
+        last if ($has_quit);
     }
 }
 
@@ -275,14 +292,58 @@ sub process_post_login
     elsif ($cmd eq "330") {
         my ($nick, $authed_nick) = (split /\s+/, $param)[1,2];
 
-        $authed_nicks{$nick} = $authed_nick;
+        nick_is_auth ($nick, $authed_nick );
+
+        check_op ($nick);
     }
     # End of whois
     elsif ($cmd eq "318") {
         my $nick = (split /\s+/, $param)[1];
 
-        # If we don't have a record of the nick, mark as not authed
-        $authed_nicks{$nick} = 0 if (!defined ($authed_nicks{$nick}));
+        nick_not_auth ($nick);
+    }
+    # Nick change
+    elsif ($cmd eq "NICK") {
+        my $old_nick = (split /!/, $prefix)[0];
+
+        $param =~ /^:(.+)/;
+        my $new_nick = $1;
+
+        if (my $auth = authed_nick ($old_nick)) {
+            nick_is_auth ($new_nick, $auth);
+        }
+        else {
+            nick_not_auth ($new_nick);
+        }
+        nick_not_auth ($old_nick);
+    }
+    elsif ($cmd eq "JOIN") {
+        my $nick = (split /!/, $prefix)[0];
+
+        nick_not_auth ($nick);
+
+        # Recheck on join
+        irc_whois ($nick);
+    }
+    # User quit channel
+    elsif ($cmd =~ /QUIT|PART/) {
+        my $nick = (split /!/, $prefix)[0];
+
+        nick_not_auth ($nick);
+    }
+    # Mode changes for users
+    elsif ($cmd eq "MODE") {
+        my ($channel, $mode, $nick) = split (/ /, $param);
+
+        # Set where the bot is op
+        if ($nick && $nick eq $botnick) {
+            if ($mode =~ /\+o/) {
+                $my_op_channels{$channel} = 1;
+            }
+            elsif ($mode =~ /-o/) {
+                $my_op_channels{$channel} = 0;
+            }
+        }
     }
 }
 
@@ -323,6 +384,78 @@ sub process_cmd
     }
     # Command for rechecking admin status
     elsif ($cmd eq "recheck") {
+        recheck ($nick);
+    }
+
+    Plugin::process_cmd ($nick, $target, $cmd, $rest);
+
+    # Process admin command
+    if (is_admin ($nick)) {
+        process_admin_cmd ($nick, $target, $cmd, $rest);
+    }
+}
+
+sub process_admin_cmd
+{
+    my ($nick, $target, $cmd, $rest) = @_;
+
+    if ($cmd eq "admin_cmds") {
+        my $msg = "Admin commads: " . join (", ", @admin_cmds);
+        irc_privmsg ($target, $msg);
+    }
+    elsif ($cmd eq "op") {
+        my ($nick, $channel) = split (/ /, $rest);
+
+        $channel = $target if (!$channel);
+
+        irc_op ($channel, $nick);
+    }
+    elsif ($cmd eq "kick") {
+        if ($rest =~ /(\S+)         # Nick
+                      \s*
+                      ([#&]\S+)?    # Channel
+                      \s*
+                      (.*)          # Reason
+                     /xsi)
+        {
+            my ($nick, $channel, $reason) = ($1, $2, $3);
+
+            $channel = $target if (!$channel);
+            $reason = "" if (!$reason);
+
+            irc_kick ($channel, $nick, $reason);
+        }
+    }
+    elsif ($cmd eq "topic") {
+        if ($rest =~ /([#&]\S+)?    # Channel
+                      \s*
+                      (.*)          # Topic
+                     /xsi)
+        {
+            my ($channel, $topic) = ($1, $2);
+
+            $channel = $target if (!$channel);
+
+            irc_topic ($channel, $topic);
+        }
+    }
+    elsif ($cmd eq "quit") {
+        quit ($rest);
+    }
+    elsif ($cmd eq "out") {
+        output ($rest);
+    }
+    elsif ($cmd eq "msg") {
+        my @arg = split (/ /, $rest);
+
+        if (scalar @arg == 1) {
+            irc_privmsg ($target, $rest);
+        }
+        else {
+            irc_privmsg ($arg[0], $arg[1]);
+        }
+    }
+    elsif ($cmd eq "recheck") {
         if ($rest) {
             recheck ($rest);
         }
@@ -330,18 +463,18 @@ sub process_cmd
             recheck ($nick);
         }
     }
+    elsif ($cmd eq "is_admin") {
+        $nick = $rest if ($rest);
 
-    Plugin::process_cmd ($nick, $target, $cmd, $rest);
-
-    # Process admin command
-    if (is_admin ($nick)) {
-        if ($cmd =~ /^admin_cmds$/) {
-            my $msg = "Admin commads: " . join (", ", @admin_cmds);
-            irc_privmsg ($target, $msg);
+        if (is_admin ($nick)) {
+            irc_privmsg ($target, "$nick is admin");
         }
-
-        Plugin::process_admin_cmd ($nick, $target, $cmd, $rest);
+        else {
+            irc_privmsg ($target, "$nick is not admin");
+        }
     }
+
+    Plugin::process_admin_cmd ($nick, $target, $cmd, $rest);
 }
 
 # Send irc specific stuff
@@ -384,6 +517,40 @@ sub irc_whois
     output ("WHOIS $nick");
 }
 
+sub irc_op
+{
+    my ($channel, $nick) = @_;
+
+    output ("MODE $channel +o $nick");
+}
+
+sub irc_kick
+{
+    my ($channel, $nick, $reason) = @_;
+
+    $reason = $Msgs::kick if (!$reason);
+
+    output ("KICK $channel $nick :$reason");
+}
+
+sub irc_part
+{
+    output ("PART " . join (",", @_));
+}
+
+sub irc_topic
+{
+    my ($channel, $new_topic) = @_;
+
+    # If we should only check the topic
+    if (!$new_topic) {
+        output ("TOPIC $channel");
+    }
+    else {
+        output ("TOPIC $channel :$new_topic");
+    }
+}
+
 # Output to socket
 sub output
 {
@@ -409,18 +576,75 @@ sub recheck
     irc_whois ($nick);
 }
 
+sub is_treebot_op
+{
+    my ($channel) = @_;
+
+    return $my_op_channels{$channel};
+}
+
+# Check nick if we should make op, and then do it
+sub check_op
+{
+    my ($nick) = @_;
+
+    # Grab authed as nick
+    my $authed_nick = authed_nick ($nick);
+
+    # If is auth
+    if ($authed_nick) {
+        # Check if we should auto op him
+        for (@Conf::admins, @Conf::auto_op) {
+            if ($authed_nick eq $_) {
+                # Op where we can
+                map { irc_op ($_, $nick); } (keys %my_op_channels);
+            }
+        }
+    }
+}
+
 # Check if a nick is admin
 sub is_admin
 {
     my ($nick) = @_;
 
     # Sent from stdin
-    if ($nick eq "") {
+    if (!$nick) {
         return 1;
     }
-    else {
-        return $authed_nicks{$nick};
+    elsif (my $authed_nick = $authed_nicks{$nick}) {
+        for my $admin (@Conf::admins) {
+            if ($admin eq $authed_nick) {
+                return 1;
+            }
+        }
     }
+    else {
+        return 0;
+    }
+}
+
+# Return authed as nick (valuates to false if not auth)
+sub authed_nick
+{
+    my ($nick) = @_;
+
+    return $authed_nicks{$nick};
+}
+
+sub nick_is_auth
+{
+    my ($nick, $authed_nick) = @_;
+
+    $authed_nicks{$nick} = $authed_nick;
+}
+
+sub nick_not_auth
+{
+    my ($nick) = @_;
+
+    # If we don't have a record of the nick, mark as not authed
+    $authed_nicks{$nick} = 0 if (!defined ($authed_nicks{$nick}));
 }
 
 # Split into irc specific parts prefix, cmd and the rest
@@ -460,6 +684,7 @@ sub quit
 {
     Log::exe ("Quitting irc");
     irc_quit (@_);
+    $has_quit = 1;
 }
 
 1;

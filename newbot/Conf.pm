@@ -26,6 +26,12 @@ our @channels = ('#madeoftree',
 
 our $cmd_prefix = ".";
 
+# Our admins
+our @admins = qw(Mowah);
+
+# Auto op these
+our @auto_op = qw(Firekite);
+
 # Used to filter out unnecessary stuff
 our @log_blacklist = (
     # Ping pong is interesting to play but not to watch
