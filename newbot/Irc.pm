@@ -403,13 +403,6 @@ sub process_admin_cmd
         my $msg = "Admin commads: " . join (", ", @admin_cmds);
         irc_privmsg ($target, $msg);
     }
-    elsif ($cmd eq "op") {
-        my ($nick, $channel) = split (/ /, $rest);
-
-        $channel = $target if (!$channel);
-
-        irc_op ($channel, $nick);
-    }
     elsif ($cmd eq "kick") {
         if ($rest =~ /(\S+)         # Nick
                       \s*
@@ -426,25 +419,6 @@ sub process_admin_cmd
             irc_kick ($channel, $nick, $reason);
         }
     }
-    elsif ($cmd eq "topic") {
-        if ($rest =~ /([#&]\S+)?    # Channel
-                      \s*
-                      (.*)          # Topic
-                     /xsi)
-        {
-            my ($channel, $topic) = ($1, $2);
-
-            $channel = $target if (!$channel);
-
-            irc_topic ($channel, $topic);
-        }
-    }
-    elsif ($cmd eq "quit") {
-        quit ($rest);
-    }
-    elsif ($cmd eq "out") {
-        output ($rest);
-    }
     elsif ($cmd eq "msg") {
         my @arg = split (/ /, $rest);
 
@@ -454,6 +428,19 @@ sub process_admin_cmd
         else {
             irc_privmsg ($arg[0], $arg[1]);
         }
+    }
+    elsif ($cmd eq "op") {
+        my ($nick, $channel) = split (/ /, $rest);
+
+        $channel = $target if (!$channel);
+
+        irc_op ($channel, $nick);
+    }
+    elsif ($cmd eq "out") {
+        output ($rest);
+    }
+    elsif ($cmd eq "quit") {
+        quit ($rest);
     }
     elsif ($cmd eq "recheck") {
         if ($rest) {
@@ -471,6 +458,19 @@ sub process_admin_cmd
         }
         else {
             irc_privmsg ($target, "$nick is not admin");
+        }
+    }
+    elsif ($cmd eq "topic") {
+        if ($rest =~ /([#&]\S+)?    # Channel
+                      \s*
+                      (.*)          # Topic
+                     /xsi)
+        {
+            my ($channel, $topic) = ($1, $2);
+
+            $channel = $target if (!$channel);
+
+            irc_topic ($channel, $topic);
         }
     }
 
