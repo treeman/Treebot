@@ -18,6 +18,7 @@ use Irc;
 use Plugin;
 
 # Command line options
+my $help;               # Print help
 my $daemonize;          # Start as daemon.
 
 my $dry;                # Don't connect at all.
@@ -38,11 +39,17 @@ GetOptions(
     'daemon|d' => \$daemonize,
     'debug' => \$debug,
     'dry' => \$dry,
+    'help|h' => \$help,
     'no_out' => \$no_out,
     'run_tests' => \$run_tests,
     'test|t' => \$test,
     'verbose|v' => \$verbose,
 );
+
+if ($help) {
+    say "A simple perl irc bot.";
+    exit;
+}
 
 # Only show test messages, no garbage ty
 if ($run_tests) {

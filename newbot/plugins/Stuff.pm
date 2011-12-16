@@ -34,7 +34,8 @@ class Stuff extends DefaultPlugin
     }
 
     override admin_cmds () {
-        return qw(server_uptime);
+        return qw(server_uptime
+                  server_ip);
     }
 
     override process_cmd ($sender, $target, $cmd, $arg) {
@@ -54,6 +55,30 @@ class Stuff extends DefaultPlugin
         }
         elsif ($cmd eq "bnet") {
             Irc::irc_privmsg ($target, "bnet 2.0: so good you won't want lan.");
+        }
+    }
+
+    override process_admin_cmd ($sender, $target, $cmd, $arg) {
+
+        if ($cmd eq "server_uptime") {
+            my $txt = `cat /proc/uptime`;
+            if ($txt =~ /^(\d+\.\d+)/) {
+                #my $time = Util::format_time ($1);
+                my $time = $1;
+
+                Irc::irc_privmsg ($target, "Server uptime: $time");
+            }
+        }
+        elsif ($cmd eq "server_ip") {
+            # Maybe make this perlish, but who cares?
+            my $ip = `curl -s http://checkip.dyndns.org/ | grep -o "[[:digit:].]\\+"`;
+
+            if ($ip) {
+                Irc::irc_privmsg ($target, "Server public ip: $ip");
+            }
+            else {
+                Irc::irc_privmsg ($target, "Unable to fetch op adress.");
+            }
         }
     }
 
