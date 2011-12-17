@@ -12,6 +12,8 @@ use Time::Seconds;
 use Plugin;
 use Conf;
 
+use SimpleDate;
+
 class Stuff extends DefaultPlugin
 {
     override load () {
@@ -50,6 +52,13 @@ class Stuff extends DefaultPlugin
             # http status of the bot
             Irc::irc_privmsg ($target, "Status: 418 I'm a teapot");
         }
+        elsif ($cmd eq "uptime") {
+            my $passed = time() - $self->started();
+
+            my $time = Util::format_time ($passed);
+
+            Irc::irc_privmsg ($target, "Uptime: $time");
+        }
         elsif ($cmd =~ /^src|source$/) {
             Irc::irc_privmsg ($target, "http://github.com/treeman/Treebot");
         }
@@ -63,8 +72,7 @@ class Stuff extends DefaultPlugin
         if ($cmd eq "server_uptime") {
             my $txt = `cat /proc/uptime`;
             if ($txt =~ /^(\d+\.\d+)/) {
-                #my $time = Util::format_time ($1);
-                my $time = $1;
+                my $time = SimpleDate::time_passed ($1);
 
                 Irc::irc_privmsg ($target, "Server uptime: $time");
             }
