@@ -1,12 +1,13 @@
 # Todo
 
 # Bugs
-* .uptime will crash the bot, mssing format date
-  Util::format_time
-* .help duke will trigger both a help command and a duke help
+
+# Tests
+* MonkeyIsland
+* Quotes
 
 # Base
-* Correctly run tests etc
+* Correctly run tests
 * Look over command line options etc
 * Anti flood when sending loads of information
 * Character encodings are off
@@ -22,6 +23,9 @@
 * Manga prenumeration
 * TV-Episode prenumeration
 * Move stuff from old plugins to new
+    * Finding numbers
+    * isdown
+    * train
 
 # Readme
 * Set working commands here

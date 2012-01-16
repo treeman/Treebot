@@ -12,7 +12,7 @@ role Plugin
     requires qw(
         load
         cmds
-        undocumented_cmds
+        undoc_cmds
         admin_cmds
         process_cmd
         process_admin_cmd
@@ -28,7 +28,7 @@ class DefaultPlugin with Plugin
 
     # Return list of commands the plugin listens to
     method cmds () { return (); }
-    method undocumented_cmds () { return (); }
+    method undoc_cmds () { return (); }
     method admin_cmds () { return (); }
 
     # Capture command

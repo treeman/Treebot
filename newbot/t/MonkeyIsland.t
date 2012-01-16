@@ -5,5 +5,7 @@ use Test::More;
 
 use lib 'lib';
 
+use MonkeyIsland;
+
 done_testing();
 

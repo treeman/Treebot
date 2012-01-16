@@ -361,15 +361,13 @@ sub process_cmd
             irc_privmsg ($target, $Msgs::help_help);
         }
         else {
-            my $help_sent = 0;
-
             my @help = Plugin::get_cmd_help ($rest);
-            for my $msg (@help) {
-                irc_privmsg ($target, $msg);
-                $help_sent = 1;
+            if (@help) {
+                for my $msg (@help) {
+                    irc_privmsg ($target, $msg)
+                }
             }
-
-            if (!$help_sent) {
+            else {
                 irc_privmsg ($target, $Msgs::help_missing);
             }
         }

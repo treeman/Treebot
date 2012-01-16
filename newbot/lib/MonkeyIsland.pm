@@ -351,20 +351,5 @@ sub retort_to
     }
 }
 
-sub run_tests
-{
-    $last_insult = "You make me want to puke.";
-    ok (retort_recieved("You make me think somebody already did."),
-        "retort: Regular");
-    ok (retort_recieved("You make me think somebody already did"),
-        "retort: without ending dot");
-
-    $last_insult = "I will milk every drop of blood from your body!";
-    ok (retort_recieved("How aPpRopriatE. yOu fight like a Cow."),
-        "retort: Case insensitive + dot in the middle");
-    ok (!retort_recieved("How appropriates You fight like a cow"),
-        "retort: Dot only matches dot");
-}
-
 1;
 

@@ -28,7 +28,7 @@ class Stuff extends DefaultPlugin
                   pokédex);
     }
 
-    override undocumented_cmds () {
+    override undoc_cmds () {
         return qw(pew
                   src
                   bnet);
