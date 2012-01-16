@@ -12,6 +12,8 @@ use Carp;
 use Test::More;
 use Getopt::Long;
 
+use lib 'lib';
+
 use Conf;
 use Log;
 use Irc;

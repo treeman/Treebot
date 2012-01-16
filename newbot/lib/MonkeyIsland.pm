@@ -284,9 +284,6 @@ sub retort_recieved
 {
     my ($retort) = @_;
 
-    # Escape regex meanings
-    $retort =~ s/([.?])/\\$1/g;
-
     # Ending dot isn't mandatory
     if ($retort =~ /\.$/) {
         $retort = "$retort?";

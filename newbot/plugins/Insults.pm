@@ -8,7 +8,7 @@ use Test::More;
 
 use MooseX::Declare;
 use Plugin;
-use insults::MonkeyIsland;
+use MonkeyIsland;
 
 class Insults extends DefaultPlugin
 {

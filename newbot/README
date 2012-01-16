@@ -1,5 +1,10 @@
 # Todo
 
+# Bugs
+* .uptime will crash the bot, mssing format date
+  Util::format_time
+* .help duke will trigger both a help command and a duke help
+
 # Base
 * Correctly run tests etc
 * Look over command line options etc

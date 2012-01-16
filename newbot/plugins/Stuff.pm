@@ -11,7 +11,6 @@ use Time::Seconds;
 
 use Plugin;
 use Conf;
-
 use SimpleDate;
 
 class Stuff extends DefaultPlugin
@@ -55,7 +54,7 @@ class Stuff extends DefaultPlugin
         elsif ($cmd eq "uptime") {
             my $passed = time() - $self->started();
 
-            my $time = Util::format_time ($passed);
+            my $time = SimpleDate::time_passed ($passed);
 
             Irc::irc_privmsg ($target, "Uptime: $time");
         }

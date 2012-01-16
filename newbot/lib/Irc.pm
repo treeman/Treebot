@@ -664,9 +664,7 @@ sub split_irc_msg
         $
     /x;
 
-    my ($prefix, $cmd, $param) = ($1, $2, $3);
-
-    $prefix = "" if (!$prefix);
+    my ($prefix, $cmd, $param) = ($1 || "", $2 || "", $3 || "");
 
     return ($prefix, $cmd, $param);
 }

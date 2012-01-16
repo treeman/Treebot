@@ -8,7 +8,7 @@ use Test::More;
 
 use MooseX::Declare;
 use Plugin;
-use quotes::DukeNukem;
+use DukeNukem;
 
 class Quotes extends DefaultPlugin
 {
