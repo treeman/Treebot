@@ -1,12 +1,15 @@
-# Todo
+This is an irc bot with some commands and stuff.
 
-# Bugs
+Todo
+====
 
-# Tests
+Tests
+-----
 * MonkeyIsland
 * Quotes
 
-# Base
+Base
+----
 * Correctly run tests
 * Look over command line options etc
 * Anti flood when sending loads of information
@@ -16,7 +19,8 @@
 * Git checking and automatic updating
 * Restart
 
-# Plugin
+Plugin
+------
 * Mi insult
     Do something more when making successful retort
 * Working tell
@@ -27,14 +31,16 @@
     * isdown
     * train
 
-# Readme
+Readme
+------
 * Set working commands here
 * Features
 
-# Fun commands to implement
+Fun commands to implement
+-------------------------
 * activity - how much the bot is being used
 * admin commands
-    * server_ip
+    * `server_ip`
     * part
     * topic
     * version
